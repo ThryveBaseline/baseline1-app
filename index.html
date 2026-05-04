@@ -1733,10 +1733,34 @@ document.getElementById('aZone').addEventListener('dragleave', () => { document.
 document.getElementById('aZone').addEventListener('drop', e => { e.preventDefault(); document.getElementById('aZone').style.borderColor = ''; const f = e.dataTransfer.files[0]; if (f?.type.startsWith('image/')) procAImg(f); });
 document.getElementById('aRm').addEventListener('click', () => { S.analyzeImg = null; document.getElementById('aPreview').style.display = 'none'; document.getElementById('aZone').style.display = 'block'; });
 
+// Compress image before storing — keeps under Netlify function 6MB limit
+function compressImg(file, maxWidth, quality) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function procAImg(file) {
-  const r = new FileReader();
-  r.onload = e => { S.analyzeImg = e.target.result; document.getElementById('aPrevImg').src = S.analyzeImg; document.getElementById('aPreview').style.display = 'block'; document.getElementById('aZone').style.display = 'none'; };
-  r.readAsDataURL(file);
+  compressImg(file, 1024, 0.7).then(compressed => {
+    S.analyzeImg = compressed;
+    document.getElementById('aPrevImg').src = compressed;
+    document.getElementById('aPreview').style.display = 'block';
+    document.getElementById('aZone').style.display = 'none';
+  });
 }
 
 let sTmr = null;
@@ -1960,7 +1984,14 @@ function closeFoodPanel() {
 function clearFoodImg() { S.foodImg = null; document.getElementById('foodPrev').style.display = 'none'; document.getElementById('foodZone').style.display = 'block'; document.getElementById('foodImg').value = ''; }
 
 document.getElementById('foodImg').addEventListener('change', e => {
-  if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => { S.foodImg = ev.target.result; document.getElementById('fpImg').src = S.foodImg; document.getElementById('foodPrev').style.display = 'block'; document.getElementById('foodZone').style.display = 'none'; }; r.readAsDataURL(e.target.files[0]); }
+  if (e.target.files[0]) {
+    compressImg(e.target.files[0], 1024, 0.7).then(compressed => {
+      S.foodImg = compressed;
+      document.getElementById('fpImg').src = compressed;
+      document.getElementById('foodPrev').style.display = 'block';
+      document.getElementById('foodZone').style.display = 'none';
+    });
+  }
 });
 
 function startBC() {
