@@ -1543,7 +1543,7 @@ Return ONLY the JSON. No markdown. No backticks.`;
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 600,
         system,
         messages: [{ role: 'user', content: context }]
@@ -1799,7 +1799,7 @@ Return ONLY JSON.`;
     msgs.push({ role: 'user', content: 'Analyze this supplement.' + (name ? ' Product: ' + name + '.' : '') + '\n\nIngredients:\n' + text });
   }
   try {
-    const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 1200, system, messages: msgs }) });
+    const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1200, system, messages: msgs }) });
     stopSteps();
     if (!res.ok) throw new Error('Error ' + res.status);
     const data = await res.json();
@@ -2016,7 +2016,7 @@ async function foodAction() {
     if (!name) { alert('Enter a food name.'); return; }
     document.getElementById('foodActionBtn').textContent = 'Estimating...'; document.getElementById('foodActionBtn').disabled = true;
     try {
-      const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 150, system: 'Estimate nutrition. Return ONLY JSON: {"calories":number,"protein":number,"carbs":number,"fat":number}. No markdown.', messages: [{ role: 'user', content: 'Nutrition for: ' + name + (amount ? ', ' + amount : '') }] }) });
+      const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 150, system: 'Estimate nutrition. Return ONLY JSON: {"calories":number,"protein":number,"carbs":number,"fat":number}. No markdown.', messages: [{ role: 'user', content: 'Nutrition for: ' + name + (amount ? ', ' + amount : '') }] }) });
       const data = await res.json();
       const macros = JSON.parse(data.content[0].text.trim());
       showFoodPreview({ name, portion: amount || '1 serving', caffeine: caff, ...macros });
@@ -2034,7 +2034,7 @@ async function foodAction() {
   };
   try {
     const b64 = S.foodImg.split(',')[1]; const mime = S.foodImg.split(';')[0].split(':')[1];
-    const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 200, system: 'Analyze food images for nutrition. Return only valid JSON. No markdown.', messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mime, data: b64 } }, { type: 'text', text: prompts[method] }] }] }) });
+    const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, system: 'Analyze food images for nutrition. Return only valid JSON. No markdown.', messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mime, data: b64 } }, { type: 'text', text: prompts[method] }] }] }) });
     const data = await res.json();
     const raw = data.content[0].text.trim();
     let parsed; try { parsed = JSON.parse(raw); } catch { const m = raw.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : { name:'Food', calories:0, protein:0, carbs:0, fat:0 }; }
@@ -2128,7 +2128,7 @@ async function runAudit() {
   document.getElementById('auditSt').textContent = 'Running...';
   const p = getP();
   try {
-    const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 600, system: 'You are Baseline. Audit this supplement stack for interactions, overlaps, and redundancies. Be specific and honest. User: ' + (p.age||'adult') + ', ' + (p.meds?'takes medications':'no medications') + '. Return ONLY JSON: {"findings":[{"type":"good|warn|bad","title":"string","description":"string"}]}. Max 6 findings. No markdown.', messages: [{ role: 'user', content: 'Audit this stack: ' + stack.map(s => s.name).join(', ') }] }) });
+    const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, system: 'You are Baseline. Audit this supplement stack for interactions, overlaps, and redundancies. Be specific and honest. User: ' + (p.age||'adult') + ', ' + (p.meds?'takes medications':'no medications') + '. Return ONLY JSON: {"findings":[{"type":"good|warn|bad","title":"string","description":"string"}]}. Max 6 findings. No markdown.', messages: [{ role: 'user', content: 'Audit this stack: ' + stack.map(s => s.name).join(', ') }] }) });
     const data = await res.json();
     const raw = data.content[0].text.trim();
     let parsed; try { parsed = JSON.parse(raw); } catch { const m = raw.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : { findings: [] }; }
