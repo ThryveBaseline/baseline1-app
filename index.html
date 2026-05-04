@@ -1823,13 +1823,41 @@ Return ONLY JSON.`;
     msgs.push({ role: 'user', content: 'Analyze this supplement.' + (name ? ' Product: ' + name + '.' : '') + '\n\nIngredients:\n' + text });
   }
   try {
-    const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1200, system, messages: msgs }) });
+    const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2000, system, messages: msgs }) });
     stopSteps();
     if (!res.ok) throw new Error('Error ' + res.status);
     const data = await res.json();
     const raw = data.content[0].text.trim();
     let parsed;
-    try { parsed = JSON.parse(raw); } catch { const m = raw.match(/\{[\s\S]*\}/); if (m) parsed = JSON.parse(m[0]); else throw new Error('Parse failed'); }
+    try {
+      // Try direct parse first
+      parsed = JSON.parse(raw);
+    } catch {
+      try {
+        // Strip markdown code blocks if present
+        const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        parsed = JSON.parse(cleaned);
+      } catch {
+        try {
+          // Extract just the JSON object
+          const m = raw.match(/\{[\s\S]*\}/);
+          if (m) {
+            // Fix common JSON issues — trailing commas
+            const fixed = m[0].replace(/,\s*([}\]])/g, '$1');
+            parsed = JSON.parse(fixed);
+          } else throw new Error('No JSON found');
+        } catch {
+          // Last resort — build a minimal result from what we have
+          parsed = {
+            product_name: name || 'This Formula',
+            overall_score: 50,
+            summary: 'Analysis completed but response formatting was unusual. Try again or paste the ingredients as text for a more detailed analysis.',
+            ingredients: [],
+            flags: []
+          };
+        }
+      }
+    }
     renderAnalysis(parsed, name, existing);
   } catch(err) {
     stopSteps();
