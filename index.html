@@ -206,6 +206,18 @@ body::before { content: ''; position: fixed; inset: 0; background-image: url("da
 .brief-spin::before { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid transparent; border-top-color: var(--yellow); animation: spin 1s linear infinite; }
 .brief-loading-text { font-family: 'Fraunces', serif; font-size: 14px; font-style: italic; color: var(--cream-muted); }
 
+.brief-compact { padding: 12px 16px 14px; cursor: pointer; }
+.bc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.bc-expand { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--cream-muted); letter-spacing: 0.06em; }
+.bc-wins { display: flex; flex-direction: column; gap: 8px; }
+.bc-win { display: flex; align-items: flex-start; gap: 9px; }
+.bc-check { width: 17px; height: 17px; border: 1.5px solid rgba(212,240,0,0.35); border-radius: 2px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; transition: all 0.2s; margin-top: 1px; color: #0f0a06; }
+.bc-check.done { background: var(--green-bright); border-color: var(--green-bright); }
+.bc-win-text { font-size: 12px; color: var(--cream); font-weight: 300; line-height: 1.5; }
+.bc-win-text.done { text-decoration: line-through; color: var(--cream-muted); }
+.brief-dismiss { width: 100%; background: none; border: 1px solid var(--border-warm); color: var(--cream-muted); padding: 9px; font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.08em; cursor: pointer; transition: all 0.2s; margin-top: 2px; }
+.brief-dismiss:hover { border-color: var(--yellow); color: var(--yellow); }
+
 .brief-empty { padding: 20px 16px; }
 .brief-empty-head { font-family: 'Fraunces', serif; font-size: 16px; font-weight: 700; color: var(--cream); margin-bottom: 8px; }
 .brief-empty-body { font-size: 13px; color: var(--cream-muted); line-height: 1.7; font-weight: 300; margin-bottom: 14px; }
@@ -743,7 +755,7 @@ select, input, textarea, button { font-family: inherit; }
       </div>
 
       <!-- DAILY BRIEF -->
-      <div class="brief-card">
+      <div class="brief-card" id="briefCard">
         <div class="day-type-bar">
           <div class="dt-badge loading" id="dtBadge">Today's Brief</div>
           <div class="brief-whoop-row" id="briefWhoopRow" style="display:none;">
@@ -782,6 +794,20 @@ select, input, textarea, button { font-family: inherit; }
             <div class="brief-act" onclick="openDnfle()"><div class="brief-act-icon">🍽️</div><div class="brief-act-lbl">Not Hungry</div></div>
             <div class="brief-act" onclick="openInstacart()"><div class="brief-act-icon">🛒</div><div class="brief-act-lbl">Groceries</div></div>
             <div class="brief-act" onclick="generateBrief()"><div class="brief-act-icon">🔄</div><div class="brief-act-lbl">Refresh</div></div>
+          </div>
+          <div style="padding:4px 14px 12px;"><button class="brief-dismiss" onclick="dismissBrief()">Got it — track my wins ›</button></div>
+        </div>
+      </div>
+
+      <!-- BRIEF COMPACT (active day tracking) -->
+      <div id="briefCompact" style="display:none; margin: 14px 18px 0;">
+        <div class="brief-card" style="margin:0;" onclick="expandBrief()">
+          <div class="brief-compact">
+            <div class="bc-top">
+              <div class="dt-badge" id="bcBadge"></div>
+              <div class="bc-expand">tap to expand ›</div>
+            </div>
+            <div class="bc-wins" id="bcWins"></div>
           </div>
         </div>
       </div>
@@ -1596,6 +1622,12 @@ Return ONLY the JSON. No markdown. No backticks.`;
 }
 
 function renderBrief(data) {
+  // reset compact state on new render
+  const log = getLog(S.logDate);
+  log.briefDismissed = false;
+  document.getElementById('briefCompact').style.display = 'none';
+  document.getElementById('briefCard').style.display = 'block';
+
   const dt = (data.day_type || 'Baseline').toLowerCase();
   const badge = document.getElementById('dtBadge');
   badge.textContent = data.day_type || 'Baseline Day';
@@ -1612,6 +1644,16 @@ function renderBrief(data) {
       <div class="win-text">${w}</div>
     </div>`).join('');
 
+  // restore checked win states
+  (log.briefWins || []).forEach((done, i) => {
+    if (done) {
+      const item = document.getElementById('win-' + i);
+      const check = document.getElementById('wincheck-' + i);
+      if (item) item.classList.add('done');
+      if (check) check.textContent = '✓';
+    }
+  });
+
   const uww = document.getElementById('useWhatWorks');
   if (data.use_what_works && data.use_what_works.length) {
     uww.style.display = 'block';
@@ -1622,9 +1664,30 @@ function renderBrief(data) {
     uww.style.display = 'none';
   }
 
-  // Store grocery list for Instacart
   window.currentGroceryList = data.grocery_list || [];
+  document.getElementById('briefLoading').style.display = 'none';
+  document.getElementById('briefContent').style.display = 'block';
+}
 
+function renderBriefFromHistory(brief, wins) {
+  const dt = (brief.dayType || 'Baseline').toLowerCase();
+  document.getElementById('dtBadge').textContent = brief.dayType || 'Baseline Day';
+  document.getElementById('dtBadge').className = 'dt-badge ' + dt;
+  document.getElementById('briefReality').textContent = brief.reality || '';
+  document.getElementById('briefTruth').textContent = brief.truth || '';
+  currentBriefWins = brief.wins || [];
+  document.getElementById('winsList').innerHTML = (brief.wins || []).map((w, i) => {
+    const done = wins[i] || false;
+    return '<div class="win-item' + (done ? ' done' : '') + '" id="win-' + i + '" onclick="toggleWin(' + i + ')"><div class="win-check" id="wincheck-' + i + '">' + (done ? '✓' : '') + '</div><div class="win-text">' + w + '</div></div>';
+  }).join('');
+  const uww = document.getElementById('useWhatWorks');
+  if (brief.use_what_works && brief.use_what_works.length) {
+    uww.style.display = 'block';
+    document.getElementById('uwwItems').innerHTML = brief.use_what_works.map(item =>
+      '<div class="uww-item" onclick="logQuickFromBrief(\'' + item.replace(/'/g, "\\'") + '\')">+ ' + item + '</div>'
+    ).join('');
+  } else { uww.style.display = 'none'; }
+  document.getElementById('briefEmpty').style.display = 'none';
   document.getElementById('briefLoading').style.display = 'none';
   document.getElementById('briefContent').style.display = 'block';
 }
@@ -1634,6 +1697,10 @@ function toggleWin(i) {
   item.classList.toggle('done');
   const check = document.getElementById('wincheck-' + i);
   check.textContent = item.classList.contains('done') ? '✓' : '';
+  const log = getLog(S.logDate);
+  if (!log.briefWins) log.briefWins = [false, false, false];
+  log.briefWins[i] = item.classList.contains('done');
+  save();
 }
 
 function saveBriefToHistory(data) {
@@ -1644,11 +1711,67 @@ function saveBriefToHistory(data) {
     displayDate: new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
     dayType: data.day_type || 'Baseline',
     reality: data.reality || '',
+    truth: data.truth || '',
     wins: data.wins || [],
+    use_what_works: data.use_what_works || [],
   });
   if (pd.briefs.length > 14) pd.briefs = pd.briefs.slice(0, 14);
   save();
   refreshBriefHistory();
+}
+
+function dismissBrief() {
+  const log = getLog(S.logDate);
+  log.briefDismissed = true;
+  save();
+  const pd = getPD();
+  const todayBrief = (pd.briefs || []).find(b => b.date === S.logDate);
+  if (todayBrief) {
+    document.getElementById('briefCard').style.display = 'none';
+    showBriefCompact(todayBrief, log.briefWins || []);
+  }
+}
+
+function expandBrief() {
+  const log = getLog(S.logDate);
+  log.briefDismissed = false;
+  save();
+  document.getElementById('briefCompact').style.display = 'none';
+  document.getElementById('briefCard').style.display = 'block';
+  (log.briefWins || []).forEach((done, i) => {
+    const item = document.getElementById('win-' + i);
+    const check = document.getElementById('wincheck-' + i);
+    if (item) { if (done) item.classList.add('done'); else item.classList.remove('done'); }
+    if (check) check.textContent = done ? '✓' : '';
+  });
+}
+
+function showBriefCompact(brief, wins) {
+  const compact = document.getElementById('briefCompact');
+  compact.style.display = 'block';
+  const dt = (brief.dayType || 'Baseline').toLowerCase();
+  document.getElementById('bcBadge').textContent = brief.dayType || 'Baseline';
+  document.getElementById('bcBadge').className = 'dt-badge ' + dt;
+  document.getElementById('bcWins').innerHTML = (brief.wins || []).map((w, i) => {
+    const done = wins[i] || false;
+    return '<div class="bc-win" onclick="event.stopPropagation();toggleCompactWin(' + i + ')"><div class="bc-check' + (done ? ' done' : '') + '" id="bcc-' + i + '">' + (done ? '&#10003;' : '') + '</div><div class="bc-win-text' + (done ? ' done' : '') + '" id="bct-' + i + '">' + w + '</div></div>';
+  }).join('');
+}
+
+function toggleCompactWin(i) {
+  const log = getLog(S.logDate);
+  if (!log.briefWins) log.briefWins = [false, false, false];
+  log.briefWins[i] = !log.briefWins[i];
+  save();
+  const check = document.getElementById('bcc-' + i);
+  const text = document.getElementById('bct-' + i);
+  if (check) {
+    if (log.briefWins[i]) { check.classList.add('done'); check.innerHTML = '&#10003;'; }
+    else { check.classList.remove('done'); check.innerHTML = ''; }
+  }
+  if (text) {
+    if (log.briefWins[i]) text.classList.add('done'); else text.classList.remove('done');
+  }
 }
 
 function refreshBriefHistory() {
@@ -1760,6 +1883,22 @@ function refreshHome() {
   document.getElementById('sCal').textContent = cal;
   refreshPsSwitcher();
   refreshBriefHistory();
+
+  // Restore brief display state (handles page reload / profile switch)
+  const todayBrief = (pd.briefs || []).find(b => b.date === S.logDate);
+  const briefCardEl = document.getElementById('briefCard');
+  const briefCompactEl = document.getElementById('briefCompact');
+  if (todayBrief && log.briefDismissed) {
+    briefCardEl.style.display = 'none';
+    showBriefCompact(todayBrief, log.briefWins || []);
+  } else if (todayBrief && document.getElementById('briefContent').style.display !== 'block') {
+    briefCompactEl.style.display = 'none';
+    briefCardEl.style.display = 'block';
+    renderBriefFromHistory(todayBrief, log.briefWins || []);
+  } else {
+    briefCompactEl.style.display = 'none';
+    briefCardEl.style.display = 'block';
+  }
 
   // Time-gate check-in card (evening only: 7pm+)
   const isEvening = new Date().getHours() >= 19;
