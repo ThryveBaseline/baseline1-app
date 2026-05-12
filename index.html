@@ -130,6 +130,10 @@ body::before { content: ''; position: fixed; inset: 0; background-image: url("da
 .score-cls.g { color: var(--green-bright); }
 .score-cls.o { color: var(--amber); }
 .score-cls.r { color: var(--red); }
+.score-ctx { font-family: 'DM Mono', monospace; font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; text-align: right; }
+.score-ctx.g { color: var(--green-bright); }
+.score-ctx.o { color: var(--amber); }
+.score-ctx.r { color: var(--red); }
 .emp { padding: 24px 16px; text-align: center; background: var(--surface); }
 .emp-i { font-size: 22px; margin-bottom: 7px; }
 .emp-t { font-family: 'Fraunces', serif; font-size: 14px; font-weight: 700; color: var(--cream-dim); margin-bottom: 4px; }
@@ -1836,6 +1840,7 @@ function startSteps() {
 function stopSteps() { if (sTmr) clearInterval(sTmr); }
 
 function scCls(n) { return n >= 70 ? 'g' : n >= 40 ? 'o' : 'r'; }
+function scoreContext(n) { return n >= 80 ? 'Excellent' : n >= 70 ? 'Solid' : n >= 60 ? 'Adequate' : 'Weak'; }
 
 function estimateCaffeine(name) {
   const n = name.toLowerCase();
@@ -1984,7 +1989,7 @@ function renderAnalysis(data, fallback, existing) {
   const stackNote = data.stack_notes ? '<div style="font-size:13px;line-height:1.8;color:var(--cream-dim);font-weight:300;font-style:italic;padding:12px 14px;background:var(--raised);border-left:2px solid var(--amber);">Stack note: ' + data.stack_notes + '</div>' : '';
   const flagsHTML = (data.flags||[]).map(f => { const m = f.type==='good'?'&#10003;':f.type==='interaction'?'&#9888;':f.type==='warn'?'!':'&#10007;'; return '<div class="flag-row"><div class="fm-tag ' + f.type + '">' + m + '</div><span>' + f.text + '</span></div>'; }).join('');
   const ingsHTML = (data.ingredients||[]).map(ing => { const c = rcCls(ing.rating); return '<div class="ic ' + c + '"><div class="ic-top"><div><div class="ic-name">' + ing.name + '</div><div class="ic-dose">' + (ing.dose||'') + '</div></div><div class="ic-badge ' + c + '">' + ing.rating + '</div></div><div class="ic-exp">' + ing.explanation + '</div></div>'; }).join('');
-  document.getElementById('aResultsInner').innerHTML = compareHTML + '<div class="r-hdr"><div><div class="r-name">' + name + '</div><div class="r-meta">Baseline Analysis &middot; ' + new Date().toLocaleDateString() + '</div></div><div class="score-ring ' + cls + '"><div class="sr-num">' + data.overall_score + '</div><div class="sr-den">/100</div></div></div><div class="r-summary">' + data.summary + '</div>' + stackNote + (flagsHTML ? '<div class="rsec-lbl">Key Findings</div><div class="flags-list">' + flagsHTML + '</div>' : '') + (ingsHTML ? '<div class="rsec-lbl">Ingredients</div><div class="ing-cards">' + ingsHTML + '</div>' : '') + '<button class="btn-g" id="saveStackBtn" onclick="saveToStack(\'' + name.replace(/'/g,"\\'") + '\',' + data.overall_score + ')">+ Save to My Stack</button><div class="r-disc">For informational purposes only. Not medical advice. Consult a healthcare provider before starting any supplement.</div>';
+  document.getElementById('aResultsInner').innerHTML = compareHTML + '<div class="r-hdr"><div><div class="r-name">' + name + '</div><div class="r-meta">Baseline Analysis &middot; ' + new Date().toLocaleDateString() + '</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;"><div class="score-ring ' + cls + '"><div class="sr-num">' + data.overall_score + '</div><div class="sr-den">/100</div></div><div class="score-ctx ' + cls + '">' + scoreContext(data.overall_score) + '</div></div></div><div class="r-summary">' + data.summary + '</div>' + stackNote + (flagsHTML ? '<div class="rsec-lbl">Key Findings</div><div class="flags-list">' + flagsHTML + '</div>' : '') + (ingsHTML ? '<div class="rsec-lbl">Ingredients</div><div class="ing-cards">' + ingsHTML + '</div>' : '') + '<button class="btn-g" id="saveStackBtn" onclick="saveToStack(\'' + name.replace(/'/g,"\\'") + '\',' + data.overall_score + ')">+ Save to My Stack</button><div class="r-disc">For informational purposes only. Not medical advice. Consult a healthcare provider before starting any supplement.</div>';
   document.getElementById('aLoading').style.display = 'none';
   document.getElementById('aResults').style.display = 'flex';
 }
@@ -2282,7 +2287,7 @@ function refreshStack() {
   document.getElementById('stackList').innerHTML = [...stack].reverse().map((item, ri) => {
     const idx = stack.length - 1 - ri;
     const c = scCls(item.score);
-    return '<div class="li"><div class="li-l"><div class="li-n">' + item.name + '</div><div class="li-s">Score: ' + item.score + ' &middot; ' + item.date + '</div></div><div class="li-r"><div class="score-cls ' + c + '">' + item.score + '</div><button class="stack-del" onclick="event.stopPropagation();deleteStackItem(' + idx + ')" title="Remove">&#10005;</button></div></div>';
+    return '<div class="li"><div class="li-l"><div class="li-n">' + item.name + '</div><div class="li-s">Score: ' + item.score + ' &middot; ' + item.date + '</div></div><div class="li-r"><div><div class="score-cls ' + c + '">' + item.score + '</div><div class="score-ctx ' + c + '">' + scoreContext(item.score) + '</div></div><button class="stack-del" onclick="event.stopPropagation();deleteStackItem(' + idx + ')" title="Remove">&#10005;</button></div></div>';
   }).join('');
 }
 
