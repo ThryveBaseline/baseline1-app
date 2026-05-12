@@ -2077,7 +2077,18 @@ Return ONLY valid JSON:
   "flags": [{"type":"good|warn|bad|interaction","text":"string"}],
   "stack_notes": "string or null"
 }
-Scoring: 80-100 strong. 60-79 solid. 40-59 mixed. 20-39 underdosed. 0-19 misleading.
+Scoring — apply DETERMINISTICALLY. The same ingredient list must score within 5 points on any rescan:
+Start at 50. Adjust per ingredient based on clinical dose evidence:
+  +6 to +10: ingredient at or above effective clinical dose with good bioavailability form
+  +3 to +5: ingredient at 75-99% of effective dose, or solid but not optimal form
+  +1 to +2: ingredient at 50-74% of effective dose (adequate but light)
+  -2 to -5: ingredient clearly underdosed (<50% of clinical dose)
+  -5 to -10: token/label-dressing dose (cosmetic only, no physiological effect)
+  -10 to -15: proprietary blend hiding doses
+  -10 to -20: known drug interaction
+  -2: poor bioavailability form (e.g. oxide, carbonate where chelate exists)
+Final band meanings: 80-100 well-dosed actives throughout. 60-79 mostly effective, minor gaps. 40-59 mixed — some good, some underdosed. 20-39 mostly underdosed or blends. 0-19 misleading doses throughout.
+Be conservative — when dose evidence is ambiguous, score toward the lower end of the band.
 Flag drug interactions as interaction type, neutral language, recommend prescriber.
 Flag proprietary blends. Flag suspicious serving size math.
 Return ONLY JSON.`;
