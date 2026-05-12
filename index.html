@@ -928,8 +928,10 @@ select, input, textarea, button { font-family: inherit; }
         <div id="barcodeSection" style="display:none;"><div class="bc-wrap"><div id="bvc"><div class="bc-overlay"><div class="bc-frame"></div></div></div></div><div class="bc-status" id="bStatus">Point camera at barcode</div></div>
         <div id="imageSection" style="display:none;"><div class="uz" id="foodZone"><input type="file" id="foodImg" accept="image/*" capture="environment"><div class="uz-i" id="fzI">📷</div><div class="uz-t" id="fzT">Take or upload photo</div><div class="uz-s">Tap to open camera</div></div><div class="img-prev" id="foodPrev"><img id="fpImg" src="" alt="Food"><button class="img-rm" onclick="clearFoodImg()">✕</button></div></div>
         <div id="manualSection" style="display:none;">
-          <div class="fr" style="margin-bottom:8px;"><div><label class="fl">Food / Meal</label><input type="text" class="fi" id="mName" placeholder="Grilled salmon"></div><div><label class="fl">Amount</label><input type="text" class="fi" id="mAmount" placeholder="6 oz"></div></div>
-          <div><label class="fl">Caffeine (mg) optional</label><input type="number" class="fi" id="mCaff" placeholder="0"></div>
+          <div class="fr" style="margin-bottom:8px;"><div><label class="fl">Food / Meal</label><input type="text" class="fi" id="mName" placeholder="Grilled salmon" oninput="autoEstimateCaff(this.value)"></div><div><label class="fl">Amount</label><input type="text" class="fi" id="mAmount" placeholder="6 oz"></div></div>
+          <div id="caffHint" style="font-size:11px;color:var(--cream-muted);font-style:italic;margin-bottom:4px;display:none;"></div>
+          <div id="caffOverride" style="display:none;"><label class="fl">Caffeine override (mg)</label><input type="number" class="fi" id="mCaff" placeholder="0"></div>
+          <button type="button" id="caffToggleBtn" onclick="toggleCaffOverride()" style="background:none;border:none;color:var(--cream-muted);font-size:11px;cursor:pointer;padding:2px 0 8px;font-family:'DM Mono',monospace;letter-spacing:0.04em;">+ set caffeine manually</button>
         </div>
         <div id="servingSection" style="display:none;"><label class="fl">Servings you had</label><select class="fs" id="servingCount"><option value="0.5">Half serving</option><option value="1" selected>1 serving</option><option value="1.5">1.5 servings</option><option value="2">2 servings</option><option value="3">3 servings</option></select></div>
         <div class="food-result-prev" id="foodResultPrev">
@@ -1831,6 +1833,49 @@ function startSteps() {
 function stopSteps() { if (sTmr) clearInterval(sTmr); }
 
 function scCls(n) { return n >= 70 ? 'g' : n >= 40 ? 'o' : 'r'; }
+
+function estimateCaffeine(name) {
+  const n = name.toLowerCase();
+  if (/energy drink|red bull|monster|bang|celsius|prime/.test(n)) return -1;
+  if (/espresso/.test(n)) return 64;
+  if (/coffee|cold brew|americano|latte|cappuccino|macchiato|cortado/.test(n)) return 90;
+  if (/green tea/.test(n)) return 40;
+  if (/black tea/.test(n)) return 45;
+  if (/decaf/.test(n)) return 5;
+  if (/tea/.test(n)) return 25;
+  return 0;
+}
+
+function autoEstimateCaff(name) {
+  const hint = document.getElementById('caffHint');
+  const override = document.getElementById('caffOverride');
+  const btn = document.getElementById('caffToggleBtn');
+  if (!hint) return;
+  const caff = estimateCaffeine(name);
+  if (caff === -1) {
+    hint.textContent = 'Energy drink — enter caffeine manually';
+    hint.style.display = 'block';
+    override.style.display = 'block';
+    btn.style.display = 'none';
+  } else if (caff > 0) {
+    hint.textContent = 'Est. ' + caff + 'mg caffeine auto-applied';
+    hint.style.display = 'block';
+    override.style.display = 'none';
+    btn.style.display = 'inline';
+  } else {
+    hint.style.display = 'none';
+    override.style.display = 'none';
+    btn.style.display = 'inline';
+  }
+}
+
+function toggleCaffOverride() {
+  const el = document.getElementById('caffOverride');
+  const btn = document.getElementById('caffToggleBtn');
+  const visible = el.style.display !== 'none';
+  el.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? '+ set caffeine manually' : '− hide caffeine field';
+}
 function rcCls(r) {
   const s = (r||'').toLowerCase();
   if (s.includes('effective') || s.includes('solid') || s.includes('strong')) return 'g';
@@ -2063,6 +2108,9 @@ function closeFoodPanel() {
   document.getElementById('mName').value = '';
   document.getElementById('mAmount').value = '';
   document.getElementById('mCaff').value = '';
+  document.getElementById('caffHint').style.display = 'none';
+  document.getElementById('caffOverride').style.display = 'none';
+  document.getElementById('caffToggleBtn').style.display = 'inline';
 }
 
 function clearFoodImg() { S.foodImg = null; document.getElementById('foodPrev').style.display = 'none'; document.getElementById('foodZone').style.display = 'block'; document.getElementById('foodImg').value = ''; }
@@ -2127,7 +2175,9 @@ async function foodAction() {
   if (method === 'manual') {
     const name = document.getElementById('mName').value.trim();
     const amount = document.getElementById('mAmount').value.trim();
-    const caff = parseInt(document.getElementById('mCaff').value) || 0;
+    const caffOverrideVisible = document.getElementById('caffOverride').style.display !== 'none';
+    const caffEst = estimateCaffeine(name);
+    const caff = caffOverrideVisible ? (parseInt(document.getElementById('mCaff').value) || 0) : (caffEst > 0 ? caffEst : 0);
     if (!name) { alert('Enter a food name.'); return; }
     document.getElementById('foodActionBtn').textContent = 'Estimating...'; document.getElementById('foodActionBtn').disabled = true;
     try {
