@@ -985,6 +985,7 @@ select, input, textarea, button { font-family: inherit; }
         <button class="btn-y" id="foodActionBtn" onclick="foodAction()">Analyze →</button>
         <button class="btn-g" id="foodLogBtn" onclick="logFoodItem()" style="display:none;">+ Log This Food</button>
         <button style="display:none;background:var(--raised);border:1px solid var(--border-warm);color:var(--cream-muted);padding:11px;font-size:12px;cursor:pointer;width:100%;transition:all 0.2s;" id="foodSaveBtn" onclick="saveMeal()">Save as Meal</button>
+        <button style="display:none;background:none;border:none;color:var(--cream-muted);font-size:12px;cursor:pointer;width:100%;padding:10px 0 4px;font-family:'DM Mono',monospace;letter-spacing:0.04em;" id="describeRetryBtn" onclick="describeRetry()">← Try a different description</button>
       </div>
     </div>
 
@@ -2270,6 +2271,7 @@ function openFood(method) {
   document.getElementById('foodActionBtn').textContent = 'Analyze →';
   document.getElementById('foodLogBtn').style.display = 'none';
   document.getElementById('foodSaveBtn').style.display = 'none';
+  document.getElementById('describeRetryBtn').style.display = 'none';
   const titles = { barcode: '&#128247; Barcode Scan', label: '&#127991; Nutrition Label', recipe: '&#128218; Recipe Photo', plate: '&#127869; Plate Photo', manual: '&#9999; Manual Entry', describe: '&#9997;&#65039; Describe Meal' };
   document.getElementById('fpTitle').innerHTML = titles[method];
   if (method === 'barcode') { document.getElementById('barcodeSection').style.display = 'block'; document.getElementById('foodActionBtn').style.display = 'none'; startBC(); }
@@ -2285,6 +2287,18 @@ function openFood(method) {
     document.getElementById('foodActionBtn').textContent = method === 'plate' ? 'Estimate Plate &#8594;' : 'Read &#38; Calculate &#8594;';
   }
   panel.scrollIntoView({ behavior: 'smooth' });
+}
+
+function describeRetry() {
+  S.pendingFood = null;
+  document.getElementById('foodResultPrev').classList.remove('show');
+  document.getElementById('foodLogBtn').style.display = 'none';
+  document.getElementById('foodSaveBtn').style.display = 'none';
+  document.getElementById('describeRetryBtn').style.display = 'none';
+  document.getElementById('describeSection').style.display = 'block';
+  document.getElementById('foodActionBtn').style.display = 'block';
+  document.getElementById('foodActionBtn').textContent = 'Estimate Macros →';
+  document.getElementById('describeText').focus();
 }
 
 function closeFoodPanel() {
@@ -2375,7 +2389,8 @@ async function foodAction() {
       } else {
         showFoodPreview({ name: text, portion: 'full meal', calories: 0, protein: 0, carbs: 0, fat: 0, caffeine: 0 });
       }
-    } catch(e) { showFoodPreview({ name: text, portion: 'full meal', calories: 0, protein: 0, carbs: 0, fat: 0, caffeine: 0 }); }
+      document.getElementById('describeRetryBtn').style.display = 'block';
+    } catch(e) { showFoodPreview({ name: text, portion: 'full meal', calories: 0, protein: 0, carbs: 0, fat: 0, caffeine: 0 }); document.getElementById('describeRetryBtn').style.display = 'block'; }
     finally { document.getElementById('foodActionBtn').textContent = 'Estimate Macros →'; document.getElementById('foodActionBtn').disabled = false; }
     return;
   }
