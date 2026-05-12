@@ -250,8 +250,6 @@ body::before { content: ''; position: fixed; inset: 0; background-image: url("da
 .dnfle-opt-icon { font-size: 18px; flex-shrink: 0; }
 .dnfle-opt-name { font-size: 13px; font-weight: 500; color: var(--cream); margin-bottom: 2px; }
 .dnfle-opt-desc { font-size: 11px; color: var(--cream-muted); font-weight: 300; }
-.instacart-btn { background: var(--forest); border: 1px solid var(--border-green); color: var(--green-bright); padding: 12px 14px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px; }
-.instacart-btn:hover { background: var(--forest-mid); }
 
 /* HOME */
 .home-hero { padding: 16px 18px 12px; background: linear-gradient(180deg, var(--forest) 0%, var(--bg) 100%); border-bottom: 1px solid var(--border); }
@@ -1107,7 +1105,6 @@ select, input, textarea, button { font-family: inherit; }
     <div class="modal-title">Not feeling hungry?</div>
     <p style="font-size:13px;color:var(--cream-muted);margin-bottom:14px;font-weight:300;">Don't rely on hunger. Here's what still works.</p>
     <div class="dnfle-opts" id="dnfleOpts"></div>
-    <button class="instacart-btn" onclick="openInstacart()">🛒 Order via Instacart</button>
     <button style="background:none;border:none;color:var(--cream-muted);font-size:12px;cursor:pointer;width:100%;padding:10px;margin-top:4px;" onclick="closeModal('dnfleModal')">Close</button>
   </div>
 </div>
