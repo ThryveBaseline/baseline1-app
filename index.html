@@ -953,7 +953,8 @@ select, input, textarea, button { font-family: inherit; }
         <button class="fm" onclick="openFood('label')"><div class="fm-i">🏷️</div><div class="fm-n">Label Photo</div><div class="fm-d">Read nutrition facts</div></button>
         <button class="fm" onclick="openFood('recipe')"><div class="fm-i">📖</div><div class="fm-n">Recipe</div><div class="fm-d">Photo of any recipe</div></button>
         <button class="fm" onclick="openFood('plate')"><div class="fm-i">🍽️</div><div class="fm-n">Plate Photo</div><div class="fm-d">AI estimates</div></button>
-        <button class="fm" onclick="openFood('manual')" style="grid-column:span 2;"><div class="fm-i">✏️</div><div class="fm-n">Manual Entry</div><div class="fm-d">Type it in, AI estimates macros</div></button>
+        <button class="fm" onclick="openFood('manual')"><div class="fm-i">✏️</div><div class="fm-n">Manual Entry</div><div class="fm-d">Name + amount, AI estimates</div></button>
+        <button class="fm" onclick="openFood('describe')"><div class="fm-i">✍️</div><div class="fm-n">Describe Meal</div><div class="fm-d">Full sentence, one log entry</div></button>
       </div>
       <div class="saved-meals-wrap" id="smWrap">
         <div class="sec-lbl" style="padding:0;margin-bottom:7px;">Saved Meals</div>
@@ -968,6 +969,10 @@ select, input, textarea, button { font-family: inherit; }
           <div id="caffHint" style="font-size:11px;color:var(--cream-muted);font-style:italic;margin-bottom:4px;display:none;"></div>
           <div id="caffOverride" style="display:none;"><label class="fl">Caffeine override (mg)</label><input type="number" class="fi" id="mCaff" placeholder="0"></div>
           <button type="button" id="caffToggleBtn" onclick="toggleCaffOverride()" style="background:none;border:none;color:var(--cream-muted);font-size:11px;cursor:pointer;padding:2px 0 8px;font-family:'DM Mono',monospace;letter-spacing:0.04em;">+ set caffeine manually</button>
+        </div>
+        <div id="describeSection" style="display:none;">
+          <label class="fl" style="margin-bottom:6px;">What did you eat?</label>
+          <textarea class="fi" id="describeText" rows="4" placeholder="e.g. Logan's Roadhouse 6oz sirloin with green beans and mashed potatoes" style="resize:vertical;line-height:1.6;padding:10px;min-height:88px;"></textarea>
         </div>
         <div id="servingSection" style="display:none;"><label class="fl">Servings you had</label><select class="fs" id="servingCount"><option value="0.5">Half serving</option><option value="1" selected>1 serving</option><option value="1.5">1.5 servings</option><option value="2">2 servings</option><option value="3">3 servings</option></select></div>
         <div class="food-result-prev" id="foodResultPrev">
@@ -2259,16 +2264,17 @@ function openFood(method) {
   S.foodMethod = method; S.foodImg = null; S.pendingFood = null;
   const panel = document.getElementById('foodPanel');
   panel.classList.add('open');
-  ['barcodeSection','imageSection','manualSection','servingSection'].forEach(id => document.getElementById(id).style.display = 'none');
+  ['barcodeSection','imageSection','manualSection','describeSection','servingSection'].forEach(id => document.getElementById(id).style.display = 'none');
   document.getElementById('foodResultPrev').classList.remove('show');
   document.getElementById('foodActionBtn').style.display = 'block';
   document.getElementById('foodActionBtn').textContent = 'Analyze →';
   document.getElementById('foodLogBtn').style.display = 'none';
   document.getElementById('foodSaveBtn').style.display = 'none';
-  const titles = { barcode: '&#128247; Barcode Scan', label: '&#127991; Nutrition Label', recipe: '&#128218; Recipe Photo', plate: '&#127869; Plate Photo', manual: '&#9999; Manual Entry' };
+  const titles = { barcode: '&#128247; Barcode Scan', label: '&#127991; Nutrition Label', recipe: '&#128218; Recipe Photo', plate: '&#127869; Plate Photo', manual: '&#9999; Manual Entry', describe: '&#9997;&#65039; Describe Meal' };
   document.getElementById('fpTitle').innerHTML = titles[method];
   if (method === 'barcode') { document.getElementById('barcodeSection').style.display = 'block'; document.getElementById('foodActionBtn').style.display = 'none'; startBC(); }
   else if (method === 'manual') { document.getElementById('manualSection').style.display = 'block'; document.getElementById('foodActionBtn').textContent = 'Estimate Macros →'; document.getElementById('mName').focus(); }
+  else if (method === 'describe') { document.getElementById('describeSection').style.display = 'block'; document.getElementById('foodActionBtn').textContent = 'Estimate Macros →'; document.getElementById('describeText').focus(); }
   else {
     document.getElementById('imageSection').style.display = 'block';
     const icons = { label: '&#127991;', recipe: '&#128218;', plate: '&#127869;' };
@@ -2290,6 +2296,7 @@ function closeFoodPanel() {
   document.getElementById('mName').value = '';
   document.getElementById('mAmount').value = '';
   document.getElementById('mCaff').value = '';
+  document.getElementById('describeText').value = '';
   document.getElementById('caffHint').style.display = 'none';
   document.getElementById('caffOverride').style.display = 'none';
   document.getElementById('caffToggleBtn').style.display = 'inline';
@@ -2354,6 +2361,24 @@ function showFoodPreview(food, note) {
 
 async function foodAction() {
   const method = S.foodMethod;
+  if (method === 'describe') {
+    const text = document.getElementById('describeText').value.trim();
+    if (!text) { toast('Describe what you ate first', 'warn'); return; }
+    document.getElementById('foodActionBtn').textContent = 'Estimating...'; document.getElementById('foodActionBtn').disabled = true;
+    try {
+      const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, system: 'Estimate nutrition for a complete meal as described. Return ONLY JSON: {"name":"string","calories":number,"protein":number,"carbs":number,"fat":number,"caffeine":number}. Use typical restaurant/home portions if amounts not specified. Caffeine: only if a caffeinated item is present, otherwise 0. No markdown.', messages: [{ role: 'user', content: 'Meal: ' + text }] }) });
+      const data = await res.json();
+      const raw = data.content[0].text.trim();
+      let parsed; try { parsed = JSON.parse(raw); } catch { const m = raw.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
+      if (parsed) {
+        showFoodPreview({ name: parsed.name || text, portion: 'full meal', calories: parsed.calories||0, protein: parsed.protein||0, carbs: parsed.carbs||0, fat: parsed.fat||0, caffeine: parsed.caffeine||0 });
+      } else {
+        showFoodPreview({ name: text, portion: 'full meal', calories: 0, protein: 0, carbs: 0, fat: 0, caffeine: 0 });
+      }
+    } catch(e) { showFoodPreview({ name: text, portion: 'full meal', calories: 0, protein: 0, carbs: 0, fat: 0, caffeine: 0 }); }
+    finally { document.getElementById('foodActionBtn').textContent = 'Estimate Macros →'; document.getElementById('foodActionBtn').disabled = false; }
+    return;
+  }
   if (method === 'manual') {
     const name = document.getElementById('mName').value.trim();
     const amount = document.getElementById('mAmount').value.trim();
