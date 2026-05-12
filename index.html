@@ -355,6 +355,12 @@ body::before { content: ''; position: fixed; inset: 0; background-image: url("da
 .fm-i { font-size: 16px; }
 .fm-n { font-size: 11px; font-weight: 500; color: var(--cream); }
 .fm-d { font-size: 9px; color: var(--cream-muted); font-weight: 300; line-height: 1.4; }
+.sf-wrap { margin: 0 18px 10px; }
+.sf-tier { margin-bottom: 9px; }
+.sf-tier-lbl { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.12em; color: var(--cream-muted); text-transform: uppercase; margin-bottom: 5px; }
+.sf-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.sf-chip { background: var(--raised); border: 1px solid var(--border-warm); padding: 5px 11px; font-size: 12px; cursor: pointer; color: var(--cream-dim); font-family: inherit; transition: border-color 0.15s, color 0.15s; }
+.sf-chip:active, .sf-chip:hover { border-color: var(--yellow); color: var(--cream); }
 .food-panel { display: none; margin: 0 18px; flex-direction: column; gap: 9px; }
 .food-panel.open { display: flex; }
 .fp-hdr { display: flex; align-items: center; justify-content: space-between; }
@@ -948,6 +954,7 @@ select, input, textarea, button { font-family: inherit; }
       </div>
       <div class="sec-lbl">Food Log</div>
       <div class="food-list" id="foodList"></div>
+      <div class="sf-wrap" id="sfWrap" style="display:none;"><div id="sfContent"></div></div>
       <div class="food-methods">
         <button class="fm" onclick="openFood('barcode')"><div class="fm-i">📷</div><div class="fm-n">Barcode</div><div class="fm-d">Instant lookup</div></button>
         <button class="fm" onclick="openFood('label')"><div class="fm-i">🏷️</div><div class="fm-n">Label Photo</div><div class="fm-d">Read nutrition facts</div></button>
@@ -2230,6 +2237,7 @@ function refreshLog() {
     document.getElementById('metEnergy').value = '';
     document.getElementById('metMood').value = '';
   }
+  refreshSuggestedFoods();
   refreshSavedMeals();
 }
 
@@ -2454,6 +2462,79 @@ function saveMeal() {
   save();
   document.getElementById('foodSaveBtn').textContent = '&#10003; Saved'; document.getElementById('foodSaveBtn').disabled = true;
   toast('Saved as meal');
+}
+
+let _sfFoods = [];
+
+function refreshSuggestedFoods() {
+  _sfFoods = [];
+  const pd = getPD();
+  const p = getP();
+  const logs = pd.logs || {};
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+
+  const countMap = {};   // nameKey -> total count
+  const latestMap = {};  // nameKey -> food object (most recent occurrence)
+  const recentOrder = []; // nameKeys in order seen within the 7-day window
+
+  Object.keys(logs).sort().forEach(date => {
+    (logs[date].foods || []).forEach(f => {
+      if (!f.name) return;
+      const key = f.name.toLowerCase().trim();
+      countMap[key] = (countMap[key] || 0) + 1;
+      latestMap[key] = f;
+      if (date >= cutoffStr && !recentOrder.includes(key)) recentOrder.push(key);
+    });
+  });
+
+  const frequentKeys = new Set();
+  const frequent = Object.entries(countMap)
+    .filter(([, c]) => c >= 3)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([k]) => { frequentKeys.add(k); return latestMap[k]; });
+
+  const recentKeys = new Set(recentOrder);
+  const recent = [...recentOrder].reverse()
+    .filter(k => !frequentKeys.has(k))
+    .slice(0, 6)
+    .map(k => latestMap[k]);
+
+  const quickFoods = (p.quickFoods || []).filter(qf => {
+    const k = qf.name.toLowerCase().trim();
+    return !frequentKeys.has(k) && !recentKeys.has(k);
+  });
+
+  const wrap = document.getElementById('sfWrap');
+  if (!frequent.length && !recent.length && !quickFoods.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+
+  function chipHtml(f) {
+    const idx = _sfFoods.length;
+    _sfFoods.push(f);
+    return '<button class="sf-chip" onclick="relogFood(' + idx + ')">' + f.name + '</button>';
+  }
+  function tierHtml(label, foods) {
+    return '<div class="sf-tier"><div class="sf-tier-lbl">' + label + '</div><div class="sf-chips">' + foods.map(chipHtml).join('') + '</div></div>';
+  }
+
+  let html = '';
+  if (frequent.length) html += tierHtml('Frequent', frequent);
+  if (recent.length) html += tierHtml('Recent', recent);
+  if (quickFoods.length) html += tierHtml('Quick Foods', quickFoods);
+  document.getElementById('sfContent').innerHTML = html;
+}
+
+function relogFood(idx) {
+  const f = _sfFoods[idx];
+  if (!f) return;
+  const log = getLog(S.logDate);
+  log.foods.push({ name: f.name, portion: f.portion || '1 serving', calories: f.calories || 0, protein: f.protein || 0, carbs: f.carbs || 0, fat: f.fat || 0, caffeine: f.caffeine || 0 });
+  save(); refreshLog(); refreshHome();
+  toast('Logged: ' + f.name);
 }
 
 function refreshSavedMeals() {
