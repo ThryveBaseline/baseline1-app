@@ -55,8 +55,10 @@ body::before { content: ''; position: fixed; inset: 0; background-image: url("da
 .ps-av { width: 26px; height: 26px; border-radius: 50%; background: var(--forest-mid); border: 1.5px solid var(--border-green); display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', serif; font-size: 11px; font-weight: 700; color: var(--green-bright); flex-shrink: 0; }
 .ps-name { font-size: 12px; color: var(--cream-dim); max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ps-chev { font-size: 9px; color: var(--cream-muted); }
-.ps-drop { position: absolute; top: calc(100% + 6px); right: 0; background: var(--surface); border: 1px solid var(--border-warm); min-width: 176px; z-index: 100; display: none; box-shadow: 0 8px 32px var(--shadow); }
+.ps-drop { position: absolute; top: calc(100% + 6px); right: 0; background: var(--surface); border: 1px solid var(--border-warm); min-width: 180px; z-index: 100; display: none; box-shadow: 0 8px 32px var(--shadow); }
 .ps-drop.open { display: block; animation: fadeIn 0.15s ease; }
+.ps-drop-hint { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--cream-muted); padding: 9px 14px 8px; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); line-height: 1.6; }
+.ps-name-setup { color: var(--yellow) !important; }
 .ps-drop-item { display: flex; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; transition: background 0.15s; border-bottom: 1px solid var(--border); }
 .ps-drop-item:last-child { border-bottom: none; }
 .ps-drop-item:hover { background: var(--raised); }
@@ -736,6 +738,7 @@ select, input, textarea, button { font-family: inherit; }
           <div class="ps-chev">▾</div>
         </div>
         <div class="ps-drop" id="psDrop">
+          <div class="ps-drop-hint">Tap name to switch &middot; <span onclick="closePsDrop();nav('profile')" style="color:var(--yellow);cursor:pointer;">Profile</span> to rename</div>
           <div id="psList"></div>
           <div class="ps-drop-item" onclick="openAddProfile()"><div class="psd-plus">+</div><div class="psd-name">Add Family Member</div></div>
         </div>
@@ -1479,7 +1482,11 @@ function refreshPsSwitcher() {
   const p = getP();
   const init = (p.name || '?').charAt(0).toUpperCase();
   document.getElementById('psAv').textContent = init;
-  document.getElementById('psName').textContent = (p.name || 'Profile').split(' ')[0];
+  const isDefaultName = !p.name || p.name === 'Friend';
+  const psNameEl = document.getElementById('psName');
+  psNameEl.textContent = isDefaultName ? 'Set name' : p.name.split(' ')[0];
+  if (isDefaultName) psNameEl.classList.add('ps-name-setup');
+  else psNameEl.classList.remove('ps-name-setup');
   document.getElementById('psList').innerHTML = S.profiles.map((prof, i) => {
     const pi = (prof.name || '?').charAt(0).toUpperCase();
     return '<div class="ps-drop-item ' + (i === S.activeId ? 'cur' : '') + '" onclick="switchProfile(' + i + ')"><div class="psd-av">' + pi + '</div><div class="psd-name">' + (prof.name || 'Profile') + '</div></div>';
@@ -2480,7 +2487,11 @@ async function runAudit() {
 function refreshProfile() {
   refreshProfileUI();
   const p = getP();
-  if (p.name) document.getElementById('p-name').value = p.name;
+  const nameInput = document.getElementById('p-name');
+  if (p.name) nameInput.value = p.name;
+  const needsName = !p.name || p.name === 'Friend';
+  nameInput.style.borderColor = needsName ? 'rgba(212,240,0,0.45)' : '';
+  nameInput.placeholder = needsName ? 'Add your name to personalize Baseline' : '';
   if (p.age) document.getElementById('p-age').value = p.age;
   if (p.sex) document.getElementById('p-sex').value = p.sex;
   if (p.weight) document.getElementById('p-weight').value = p.weight;
