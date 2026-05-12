@@ -1555,6 +1555,15 @@ ${checkin ? 'Yesterday check-in: day felt ' + checkin.day + ', water ' + checkin
 ${log.metrics?.weight ? 'Current weight: ' + log.metrics.weight + ' lbs.' : ''}
 `;
 
+  const briefHour = new Date().getHours();
+  const timingCtx = briefHour < 8
+    ? 'Brief generated before 8am. Soften any urgent timing language — replace phrases like "within the next 30 minutes" with "within the first hour of your morning." No pressure, ease into the day.'
+    : briefHour < 12
+    ? 'Brief generated morning. Time references like "before noon" and "by lunch" are appropriate.'
+    : briefHour < 17
+    ? 'Brief generated afternoon. Use afternoon-appropriate timing: "before dinner", "this afternoon", "in the next couple hours".'
+    : 'Brief generated evening. Wins should still be achievable today — focus on what can be done before bed.';
+
   const tone = p.briefTone || 'direct';
   const toneInstructions = tone === 'gentle'
     ? 'Voice: Warm but honest. Still tell the truth, but deliver it with care. Acknowledge the challenge before naming it. Supportive without being a cheerleader. Short sentences. No em dashes.'
@@ -1579,9 +1588,12 @@ Day type rules:
 - Baseline: mixed signals, keep it simple and consistent
 - Recovery: poor recovery, under-eating pattern, low hydration, or rough check-in yesterday
 
+Timing: ${timingCtx}
+
 Win rules:
 - 3 wins maximum. Use the user's actual targets if set. Achievable today.
-- Examples: "Get to 100g protein before dinner", "Drink 32oz before noon", "Eat something within the next hour even if small"
+- Match timing language to context above. No "within 30 minutes" if brief is generated before 8am.
+- Examples: "Get to 100g protein before dinner", "Drink 32oz before noon", "Eat something within the first hour of your morning"
 - If GLP-1 user: prioritize early eating, liquid options, electrolytes
 
 Use what works:
