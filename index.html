@@ -1173,6 +1173,7 @@ select, input, textarea, button { font-family: inherit; }
 let S = {
   profiles: [],
   activeId: 0,
+  hasOnboarded: false,
   logDate: today(),
   foodMethod: null,
   foodImg: null,
@@ -1200,7 +1201,7 @@ function getLog(d) {
 }
 
 function save() {
-  try { localStorage.setItem('bl6', JSON.stringify({ profiles: S.profiles, activeId: S.activeId, isDark: S.isDark })); } catch(e) {}
+  try { localStorage.setItem('bl6', JSON.stringify({ profiles: S.profiles, activeId: S.activeId, isDark: S.isDark, hasOnboarded: S.hasOnboarded })); } catch(e) {}
 }
 function load() {
   try {
@@ -1208,6 +1209,8 @@ function load() {
     if (d.profiles) S.profiles = d.profiles;
     if (d.activeId !== undefined) S.activeId = d.activeId;
     if (d.isDark !== undefined) S.isDark = d.isDark;
+    if (d.hasOnboarded !== undefined) S.hasOnboarded = d.hasOnboarded;
+    else if (S.profiles.some(p => p.onboarded)) S.hasOnboarded = true;
   } catch(e) {}
 }
 
@@ -1363,6 +1366,7 @@ function removeObQf(idx) {
 function finishOb() {
   const p = buildObProfile();
   S.profiles = [p]; S.activeId = 0;
+  S.hasOnboarded = true;
   save();
   document.getElementById('ob').classList.add('hidden');
   initApp();
@@ -1423,6 +1427,7 @@ function buildObProfile() {
 }
 function skipOb() {
   const defaults = calcSmartDefaults('', 'moderate', 'wellness', 'no', 80);
+  S.hasOnboarded = true;
   S.profiles = [{
     id: Date.now(),
     name: 'Friend',
@@ -2791,7 +2796,7 @@ function initApp() {
 load();
 applyTheme();
 
-if (!S.profiles.length || !S.profiles[0]?.onboarded) {
+if (!S.hasOnboarded || !S.profiles.length) {
   document.getElementById('ob').style.display = 'flex';
 } else {
   document.getElementById('ob').classList.add('hidden');
