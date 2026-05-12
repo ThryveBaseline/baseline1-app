@@ -444,6 +444,8 @@ body::before { content: ''; position: fixed; inset: 0; background-image: url("da
 .so-num.g { color: var(--green-bright); }
 .so-num.o { color: var(--amber); }
 .so-lbl { font-family: 'DM Mono', monospace; font-size: 8px; color: var(--cream-muted); letter-spacing: 0.08em; text-transform: uppercase; }
+.stack-del { background: none; border: none; color: var(--cream-muted); cursor: pointer; font-size: 12px; padding: 3px 5px; transition: color 0.2s; line-height: 1; }
+.stack-del:hover { color: var(--red); }
 .gap-card { margin: 0 18px 12px; background: var(--amber-dim); border: 1px solid rgba(217,119,6,0.4); padding: 12px 14px; position: relative; overflow: hidden; }
 .gap-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--amber), transparent); }
 .gap-title { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.14em; color: var(--amber); text-transform: uppercase; margin-bottom: 9px; }
@@ -2277,10 +2279,20 @@ function refreshStack() {
   if (goals.includes('digestion') && !stack.some(s => /bloat|digest/i.test(s.name))) gaps.push('Digestion goal — no digestive supplement found');
   if (gaps.length) { document.getElementById('gapCard').style.display = 'block'; document.getElementById('gapItems').innerHTML = gaps.map(g => '<div class="gap-item"><div class="gap-dot"></div>' + g + '</div>').join(''); }
   else { document.getElementById('gapCard').style.display = 'none'; }
-  document.getElementById('stackList').innerHTML = [...stack].reverse().map(item => {
+  document.getElementById('stackList').innerHTML = [...stack].reverse().map((item, ri) => {
+    const idx = stack.length - 1 - ri;
     const c = scCls(item.score);
-    return '<div class="li"><div class="li-l"><div class="li-n">' + item.name + '</div><div class="li-s">Score: ' + item.score + ' &middot; ' + item.date + '</div></div><div class="li-r"><div class="score-cls ' + c + '">' + item.score + '</div><span style="color:var(--cream-muted);font-size:11px;">&#8250;</span></div></div>';
+    return '<div class="li"><div class="li-l"><div class="li-n">' + item.name + '</div><div class="li-s">Score: ' + item.score + ' &middot; ' + item.date + '</div></div><div class="li-r"><div class="score-cls ' + c + '">' + item.score + '</div><button class="stack-del" onclick="event.stopPropagation();deleteStackItem(' + idx + ')" title="Remove">&#10005;</button></div></div>';
   }).join('');
+}
+
+function deleteStackItem(idx) {
+  const pd = getPD();
+  pd.stack.splice(idx, 1);
+  save();
+  refreshStack();
+  refreshHome();
+  toast('Removed from stack');
 }
 
 function toggleAudit() { document.getElementById('auditBody').classList.toggle('open'); }
