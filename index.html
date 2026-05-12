@@ -2797,7 +2797,7 @@ load();
 applyTheme();
 
 if (!S.hasOnboarded || !S.profiles.length) {
-  document.getElementById('ob').style.display = 'flex';
+  // .ob { display: flex } in CSS already makes it visible — no inline style needed
 } else {
   document.getElementById('ob').classList.add('hidden');
   initApp();
