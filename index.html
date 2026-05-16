@@ -808,6 +808,33 @@ select, input, textarea, button { font-family: inherit; }
         </div>
       </div>
 
+      <!-- WHOOP HEALTH CARD — shown when connected + data available -->
+      <div class="whoop-card" id="whoopHealthCard" style="display:none;" onclick="nav('profile')">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;color:var(--green-bright);text-transform:uppercase;">Whoop · <span id="whCardDate"></span></div>
+          <div id="whCardBadge" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+          <div style="text-align:center;">
+            <div style="font-size:22px;font-weight:700;line-height:1;" id="whCardRecov">—</div>
+            <div style="font-size:9px;color:var(--cream-muted);margin-top:3px;letter-spacing:0.06em;">RECOVERY</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:22px;font-weight:700;line-height:1;color:var(--cream);" id="whCardHrv">—</div>
+            <div style="font-size:9px;color:var(--cream-muted);margin-top:3px;letter-spacing:0.06em;">HRV ms</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:22px;font-weight:700;line-height:1;color:var(--cream);" id="whCardSleep">—</div>
+            <div style="font-size:9px;color:var(--cream-muted);margin-top:3px;letter-spacing:0.06em;">SLEEP %</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:22px;font-weight:700;line-height:1;color:var(--cream);" id="whCardStrain">—</div>
+            <div style="font-size:9px;color:var(--cream-muted);margin-top:3px;letter-spacing:0.06em;">STRAIN</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:var(--cream-muted);" id="whCardSummary"></div>
+      </div>
+
       <!-- BRIEF COMPACT (active day tracking) -->
       <div id="briefCompact" style="display:none; margin: 14px 18px 0;">
         <div class="brief-card" style="margin:0;" onclick="expandBrief()">
@@ -2910,7 +2937,7 @@ function refreshWhoopUI() {
 
   if (!latest) return;
 
-  // Brief row metrics
+  // ── Brief header row ──────────────────────────────────
   const bwR = document.getElementById('bwR');
   const bwH = document.getElementById('bwH');
   const bwS = document.getElementById('bwS');
@@ -2918,7 +2945,36 @@ function refreshWhoopUI() {
   if (bwH) bwH.textContent = latest.hrv_ms != null ? Math.round(latest.hrv_ms) + '' : '—';
   if (bwS) bwS.textContent = latest.sleep_hours != null ? latest.sleep_hours + 'h' : '—';
 
-  // Profile card metrics
+  // ── Home health card ──────────────────────────────────
+  const healthCard = document.getElementById('whoopHealthCard');
+  if (healthCard) {
+    healthCard.style.display = 'block';
+    const score = latest.recovery_score;
+    const color = recoveryColor(score);
+    const label = score != null ? (score >= 67 ? 'Green — Push' : score >= 34 ? 'Yellow — Baseline' : 'Red — Recovery') : '';
+
+    const whCardDate = document.getElementById('whCardDate');
+    const whCardBadge = document.getElementById('whCardBadge');
+    const whCardRecov = document.getElementById('whCardRecov');
+    const whCardHrv = document.getElementById('whCardHrv');
+    const whCardSleep = document.getElementById('whCardSleep');
+    const whCardStrain = document.getElementById('whCardStrain');
+    const whCardSummary = document.getElementById('whCardSummary');
+
+    if (whCardDate) whCardDate.textContent = latest.date || '';
+    if (whCardBadge) {
+      whCardBadge.textContent = label;
+      whCardBadge.style.background = score >= 67 ? 'rgba(109,184,127,0.15)' : score >= 34 ? 'rgba(217,119,6,0.15)' : 'rgba(185,28,28,0.15)';
+      whCardBadge.style.color = color;
+    }
+    if (whCardRecov) { whCardRecov.textContent = score != null ? score + '%' : '—'; whCardRecov.style.color = color; }
+    if (whCardHrv) whCardHrv.textContent = latest.hrv_ms != null ? Math.round(latest.hrv_ms) + '' : '—';
+    if (whCardSleep) whCardSleep.textContent = latest.sleep_performance != null ? latest.sleep_performance + '' : '—';
+    if (whCardStrain) whCardStrain.textContent = latest.day_strain != null ? latest.day_strain.toFixed(1) : '—';
+    if (whCardSummary) whCardSummary.textContent = latest.health_summary || '';
+  }
+
+  // ── Profile card metrics ──────────────────────────────
   if (metricsEl) { metricsEl.style.display = 'block'; }
   const wR = document.getElementById('wMetRecov');
   const wH = document.getElementById('wMetHrv');
