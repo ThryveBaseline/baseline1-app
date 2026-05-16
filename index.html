@@ -1604,75 +1604,121 @@ async function generateBrief() {
   const waterGoal = p.waterGoal || 80;
   const stack = pd.stack || [];
   const checkin = yest.checkin || null;
-  const whoopLatest = _whoopData?.latest ?? null;
+  const w = _whoopData?.latest ?? null;
 
-  const context = `
-User profile: ${p.name || 'User'}, ${p.age || 'adult'}, ${p.sex || ''}, ${p.weight ? p.weight + ' lbs' : ''}, ${p.activity || 'moderate'} activity.
-Primary goal: ${p.goal || 'general wellness'}.
-GLP-1: ${p.glp1 || 'no'}.
-Conditions: ${p.conditions || 'none'}. Medications: ${p.meds ? 'yes' : 'no'}.
-Water goal: ${waterGoal} oz/day.
-${p.targets?.protein ? 'Protein target: ' + p.targets.protein + 'g/day.' : ''}
-${p.targets?.calFloor ? 'Calorie floor: ' + p.targets.calFloor + ' cal (flag if below this).' : ''}
-${p.targets?.calCeil ? 'Calorie ceiling: ' + p.targets.calCeil + ' cal.' : ''}
-${p.targets?.bedtime ? 'Sleep target: ' + p.targets.bedtime + ' bedtime, ' + p.targets.wake + ' wake.' : ''}
-Stack: ${stack.length ? stack.map(s => s.name).join(', ') : 'none logged yet'}.
-${p.quickFoods?.length ? 'User favorite foods: ' + p.quickFoods.map(f => f.name).join(', ') + '. Reference these in use_what_works.' : ''}
-${whoopLatest ? 'Whoop health data (' + (whoopLatest.date || 'today') + '): ' + (whoopLatest.health_summary || '') + (whoopLatest.recovery_score != null ? ' | Recovery score: ' + whoopLatest.recovery_score + '%' : '') + (whoopLatest.hrv_ms != null ? ', HRV: ' + Math.round(whoopLatest.hrv_ms) + 'ms' : '') + (whoopLatest.rhr_bpm != null ? ', RHR: ' + whoopLatest.rhr_bpm + 'bpm' : '') + (whoopLatest.sleep_hours != null ? ', Sleep: ' + whoopLatest.sleep_hours + 'h (' + (whoopLatest.sleep_performance || '—') + '%)' : '') + (whoopLatest.day_strain != null ? ', Strain yesterday: ' + whoopLatest.day_strain : '') + '. Use recovery score to set day type (67+ = Push, 34-66 = Baseline, <34 = Recovery). Prioritize this data for day type classification.' : 'Whoop: not connected.'}
+  // ── Pre-classify recovery zone from Whoop data ─────────────────────────────
+  const whoopConnected = !!w;
+  const recovery = w?.recovery_score ?? null;
+  const hrv      = w?.hrv_ms      != null ? Math.round(w.hrv_ms)       : null;
+  const rhr      = w?.rhr_bpm     ?? null;
+  const sleepPct = w?.sleep_performance ?? null;
+  const sleepHrs = w?.sleep_hours ?? null;
+  const sleepCon = w?.sleep_consistency ?? null;
+  const strain   = w?.day_strain  != null ? parseFloat(w.day_strain.toFixed(1)) : null;
 
-Today so far: ${todayCal} calories, ${todayPro}g protein, ${water} oz water.
-Yesterday: ${yestCal} calories, ${yestPro}g protein, ${yest.water || 0} oz water.
-${checkin ? 'Yesterday check-in: day felt ' + checkin.day + ', water ' + checkin.water + ', food ' + checkin.food + '.' : ''}
-${log.metrics?.weight ? 'Current weight: ' + log.metrics.weight + ' lbs.' : ''}
+  const zone = recovery != null
+    ? recovery >= 67 ? 'green' : recovery >= 34 ? 'yellow' : 'red'
+    : null;
+  const determinedDayType = zone === 'green' ? 'Push' : zone === 'yellow' ? 'Baseline' : zone === 'red' ? 'Recovery' : null;
+
+  // ── Zone-specific brief instructions ──────────────────────────────────────
+  const zoneGuidance = !zone ? '' : zone === 'green' ? `
+DAY TYPE: PUSH — Recovery ${recovery}% (Green zone, ≥67)
+Body is ready. Lean in.
+- Wins: be specific and ambitious. This is a day to hit real targets, not maintain.
+- Reality/truth: name what the data says about readiness. Don't hedge.
+- If protein target set, push toward ceiling not floor.
+- High-output language is earned today. Use it.
+- Strain yesterday was ${strain ?? 'unknown'}/21 — factor this into intensity suggestion.
+` : zone === 'yellow' ? `
+DAY TYPE: BASELINE — Recovery ${recovery}% (Yellow zone, 34–66)
+Solid but not peak. Consistent beats heroic.
+- Wins: reliable and achievable. No aggressive targets. Think "solid day."
+- Reality/truth: name the specific numbers, don't just say "moderate." HRV ${hrv ?? '—'}ms, RHR ${rhr ?? '—'}bpm.
+- Sleep was ${sleepHrs ?? '—'}h at ${sleepPct ?? '—'}% performance — reference this if relevant.
+- Don't push nutrition or activity harder than the data supports.
+- Strain yesterday was ${strain ?? 'unknown'}/21 — if low, mild activity is fine; if high, rest.
+` : `
+DAY TYPE: RECOVERY — Recovery ${recovery}% (Red zone, <34)
+Pull back. The body is telling you something.
+- Wins: rest, food, water. No performance targets.
+- Reality/truth: be direct that today is a maintenance day, not a build day. Don't soften this.
+- Explicitly deprioritize intensity. This is not laziness — it's the data.
+- Sleep ${sleepHrs ?? '—'}h at ${sleepPct ?? '—'}% — this matters. Prioritize earlier bedtime tonight.
+- HRV ${hrv ?? '—'}ms, RHR ${rhr ?? '—'}bpm — if RHR is elevated, name it.
+- Strain yesterday ${strain ?? 'unknown'}/21 — if strain was high, that's likely why recovery is low.
 `;
 
+  // ── HRV context signal ─────────────────────────────────────────────────────
+  const hrvSignal = hrv == null ? '' : hrv >= 55
+    ? `HRV ${hrv}ms — elevated. Strong autonomic readiness.`
+    : hrv >= 40
+    ? `HRV ${hrv}ms — normal range. No alarm.`
+    : `HRV ${hrv}ms — suppressed. Body under stress. Reduce load.`;
+
+  // ── Build the context ──────────────────────────────────────────────────────
   const briefHour = new Date().getHours();
   const timingCtx = briefHour < 8
-    ? 'Brief generated before 8am. Soften any urgent timing language — replace phrases like "within the next 30 minutes" with "within the first hour of your morning." No pressure, ease into the day.'
-    : briefHour < 12
-    ? 'Brief generated morning. Time references like "before noon" and "by lunch" are appropriate.'
-    : briefHour < 17
-    ? 'Brief generated afternoon. Use afternoon-appropriate timing: "before dinner", "this afternoon", "in the next couple hours".'
-    : 'Brief generated evening. Wins should still be achievable today — focus on what can be done before bed.';
+    ? 'Before 8am — use "within the first hour of your morning" not "within 30 minutes."'
+    : briefHour < 12 ? 'Morning — "before noon", "by lunch" appropriate.'
+    : briefHour < 17 ? 'Afternoon — "before dinner", "this afternoon."'
+    : 'Evening — focus on what can still be done before bed.';
+
+  const context = `== PROFILE ==
+${p.name || 'User'} | ${p.age || 'adult'} | ${p.sex || ''} | ${p.weight ? p.weight + ' lbs' : ''} | ${p.activity || 'moderate'} activity
+Goal: ${p.goal || 'general wellness'} | GLP-1: ${p.glp1 || 'no'} | Conditions: ${p.conditions || 'none'}
+Water goal: ${waterGoal} oz${p.targets?.protein ? ' | Protein target: ' + p.targets.protein + 'g' : ''}${p.targets?.calFloor ? ' | Cal floor: ' + p.targets.calFloor : ''}${p.targets?.calCeil ? ' | Cal ceiling: ' + p.targets.calCeil : ''}
+Stack: ${stack.length ? stack.map(s => s.name).join(', ') : 'none'}
+${p.quickFoods?.length ? 'Favorite foods: ' + p.quickFoods.map(f => f.name).join(', ') : ''}
+
+== WHOOP BIOMETRICS (${w?.date || 'today'}) ==
+${whoopConnected ? `Recovery:   ${recovery}% — ${zone === 'green' ? 'GREEN (ready)' : zone === 'yellow' ? 'YELLOW (moderate)' : 'RED (pull back)'}
+HRV:        ${hrv ?? '—'}ms  ${hrvSignal}
+Resting HR: ${rhr ?? '—'} bpm${rhr && rhr > 70 ? ' (elevated — note this)' : ''}
+Sleep:      ${sleepHrs ?? '—'}h | Performance ${sleepPct ?? '—'}% | Consistency ${sleepCon ?? '—'}%
+Strain (yesterday): ${strain ?? '—'}/21` : 'NOT CONNECTED — base day type on nutrition and check-in data only.'}
+
+== NUTRITION ==
+Today: ${todayCal} cal | ${todayPro}g protein | ${water} oz water
+Yesterday: ${yestCal} cal | ${yestPro}g protein | ${yest.water || 0} oz water
+${checkin ? 'Check-in: day ' + checkin.day + ' | water ' + checkin.water + ' | food ' + checkin.food : 'No check-in from yesterday.'}
+${log.metrics?.weight ? 'Weight: ' + log.metrics.weight + ' lbs' : ''}
+
+Timing: ${timingCtx}`;
 
   const tone = p.briefTone || 'direct';
   const toneInstructions = tone === 'gentle'
-    ? 'Voice: Warm but honest. Still tell the truth, but deliver it with care. Acknowledge the challenge before naming it. Supportive without being a cheerleader. Short sentences. No em dashes.'
-    : 'Voice: Direct, calm, honest, slightly blunt, never preachy, never motivational. You respect the user enough to tell them the truth without sugar coating it. Short sentences. No em dashes.';
+    ? 'Voice: Warm but honest. Acknowledge challenges with care. Supportive without cheerleading. Short sentences. No em dashes.'
+    : 'Voice: Direct, calm, honest, slightly blunt. Never preachy or motivational. Respect the user enough to tell the truth. Short sentences. No em dashes.';
 
-  const system = `You are Baseline — the adult in the room. You read health data and give people an honest daily brief.
+  const system = `You are Baseline — the adult in the room. Read the biometric and nutrition data and write a specific, honest daily brief.
 
 ${toneInstructions}
 
-Return ONLY valid JSON:
+${zoneGuidance}
+
+${!zone ? `Day type rules (no Whoop data):
+- Push: good nutrition, on track, user has momentum
+- Baseline: mixed signals, maintain consistency
+- Recovery: under-eating, low hydration, rough check-in` : `The day type is DETERMINED by recovery score above. Output it exactly as given. Do not override it.`}
+
+REALITY must reference specific numbers from the data — not generic observations.
+TRUTH must name the practical implication for today — what this actually means for how to move through the day.
+WINS must be concrete and timed. No vague targets. Use actual numbers from the profile (protein target, water goal, cal targets).
+${p.glp1 && p.glp1 !== 'no' ? 'GLP-1 protocol: prioritize early eating window, liquid calories, electrolytes. Wins must reflect this.' : ''}
+
+Return ONLY valid JSON — no markdown, no backticks:
 {
-  "day_type": "Push | Baseline | Recovery",
-  "reality": "1-2 sentences. What is actually true right now based on the data. Specific, honest, no fluff.",
-  "truth": "1-2 sentences. What this means in real life today. The practical implication.",
-  "wins": ["specific achievable target 1", "specific achievable target 2", "specific achievable target 3"],
-  "use_what_works": ["food/meal suggestion 1", "food/meal suggestion 2", "food/meal suggestion 3"],
+  "day_type": "${determinedDayType || 'Push | Baseline | Recovery'}",
+  "reality": "1-2 sentences. Specific numbers. What is actually true right now.",
+  "truth": "1-2 sentences. What this means in practice today.",
+  "wins": ["specific timed win 1", "specific timed win 2", "specific timed win 3"],
+  "use_what_works": ["food or action 1", "food or action 2", "food or action 3"],
   "grocery_list": ["item 1", "item 2", "item 3", "item 4", "item 5"]
 }
 
-Day type rules:
-- Push: good recovery or data, user is on track, today is a day to build
-- Baseline: mixed signals, keep it simple and consistent
-- Recovery: poor recovery, under-eating pattern, low hydration, or rough check-in yesterday
-
-Timing: ${timingCtx}
-
-Win rules:
-- 3 wins maximum. Use the user's actual targets if set. Achievable today.
-- Match timing language to context above. No "within 30 minutes" if brief is generated before 8am.
-- Examples: "Get to 100g protein before dinner", "Drink 32oz before noon", "Eat something within the first hour of your morning"
-- If GLP-1 user: prioritize early eating, liquid options, electrolytes
-
-Use what works:
-- Pull from user favorite foods first if they have them set
-- Keep it simple and repeatable
-- No complex recipes
-
-Return ONLY the JSON. No markdown. No backticks.`;
+Win examples: "Hit ${p.targets?.protein || 100}g protein before dinner", "Drink 32oz before noon", "In bed by 10pm — HRV recovery in progress"
+Use what works: pull from favorite foods if set. Simple, repeatable.`;
 
   try {
     const res = await fetch('/api/claude', {
