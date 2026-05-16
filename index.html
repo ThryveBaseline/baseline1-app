@@ -1113,17 +1113,34 @@ select, input, textarea, button { font-family: inherit; }
 
       </div>
 
-      <!-- WHOOP SETUP GUIDE -->
-      <div class="whoop-setup">
-        <div class="ws-hdr" onclick="toggleWhoopSetup()"><div class="ws-hdr-lbl">Whoop Setup Guide</div><div class="psh-arr" id="pa-whoop">›</div></div>
+      <!-- WHOOP CONNECTION -->
+      <div class="whoop-setup" id="whoopConnectCard">
+        <div class="ws-hdr" onclick="toggleWhoopSetup()"><div class="ws-hdr-lbl" id="whoopConnectLabel">Whoop</div><div class="psh-arr" id="pa-whoop">›</div></div>
         <div class="ws-body" id="pb-whoop">
-          <div class="wsg-step"><div class="wsg-num">1</div><div><div class="wsg-title">Create developer account</div><div class="wsg-desc">Go to <a href="https://developer.whoop.com" class="wsg-link" target="_blank">developer.whoop.com</a> and sign in with your Whoop account. Create a new app called "Baseline".</div></div></div>
-          <div class="wsg-step"><div class="wsg-num">2</div><div><div class="wsg-title">Set redirect URI</div><div class="wsg-desc">In your app settings, set the redirect URI to: https://baseline.app/callback (or your Netlify URL). Copy your Client ID and Client Secret.</div></div></div>
-          <div class="wsg-step"><div class="wsg-num">3</div><div><div class="wsg-title">Enter credentials below</div><div class="wsg-desc">Paste your Client ID here. The full OAuth connection requires a backend — coming in the next build. For now your credentials are saved locally.</div></div></div>
-          <div class="wsg-inputs">
-            <div><label class="fl">Whoop Client ID</label><input type="text" class="fi" id="whoopClientId" placeholder="Your Client ID from developer.whoop.com"></div>
-            <button class="btn-g" onclick="saveWhoopCreds()">Save Credentials</button>
-            <div style="font-size:11px;color:var(--cream-muted);font-style:italic;">Full OAuth wiring coming in next build. Wear your band and let data collect this week.</div>
+          <!-- Disconnected state -->
+          <div id="whoopDisconnected">
+            <div class="wsg-step"><div class="wsg-num">1</div><div><div class="wsg-title">Create developer account</div><div class="wsg-desc">Go to <a href="https://developer.whoop.com" class="wsg-link" target="_blank">developer.whoop.com</a>, create an app called "Baseline", and set the redirect URI to your Netlify URL + /api/whoop-callback.</div></div></div>
+            <div class="wsg-step"><div class="wsg-num">2</div><div><div class="wsg-title">Add credentials to Netlify</div><div class="wsg-desc">In Netlify → Site settings → Environment variables, add: WHOOP_CLIENT_ID, WHOOP_CLIENT_SECRET, WHOOP_REDIRECT_URI, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.</div></div></div>
+            <div class="wsg-step"><div class="wsg-num">3</div><div><div class="wsg-title">Connect below</div><div class="wsg-desc">After adding credentials, tap Connect to authorize Baseline to read your Whoop data.</div></div></div>
+            <div class="wsg-inputs">
+              <button class="btn-g" onclick="connectWhoop()">Connect Whoop →</button>
+            </div>
+          </div>
+          <!-- Connected state -->
+          <div id="whoopConnected" style="display:none;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--green-bright);flex-shrink:0;"></div>
+              <div style="font-size:13px;color:var(--cream-dim);">Connected — syncing nightly at 5:30am</div>
+            </div>
+            <div id="whoopLatestMetrics" style="display:none;background:var(--raised);border-radius:6px;padding:12px 14px;margin-bottom:12px;">
+              <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;color:var(--cream-muted);text-transform:uppercase;margin-bottom:8px;">Latest Sync</div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+                <div style="text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--green-bright);" id="wMetRecov">—</div><div style="font-size:10px;color:var(--cream-muted);">Recovery</div></div>
+                <div style="text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--cream);" id="wMetHrv">—</div><div style="font-size:10px;color:var(--cream-muted);">HRV ms</div></div>
+                <div style="text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--cream);" id="wMetSleep">—</div><div style="font-size:10px;color:var(--cream-muted);">Sleep hrs</div></div>
+              </div>
+            </div>
+            <button style="background:none;border:1px solid var(--border);color:var(--cream-muted);font-size:11px;padding:6px 12px;cursor:pointer;border-radius:3px;" onclick="disconnectWhoop()">Disconnect</button>
           </div>
         </div>
       </div>
@@ -1560,6 +1577,7 @@ async function generateBrief() {
   const waterGoal = p.waterGoal || 80;
   const stack = pd.stack || [];
   const checkin = yest.checkin || null;
+  const whoopLatest = _whoopData?.latest ?? null;
 
   const context = `
 User profile: ${p.name || 'User'}, ${p.age || 'adult'}, ${p.sex || ''}, ${p.weight ? p.weight + ' lbs' : ''}, ${p.activity || 'moderate'} activity.
@@ -1573,6 +1591,7 @@ ${p.targets?.calCeil ? 'Calorie ceiling: ' + p.targets.calCeil + ' cal.' : ''}
 ${p.targets?.bedtime ? 'Sleep target: ' + p.targets.bedtime + ' bedtime, ' + p.targets.wake + ' wake.' : ''}
 Stack: ${stack.length ? stack.map(s => s.name).join(', ') : 'none logged yet'}.
 ${p.quickFoods?.length ? 'User favorite foods: ' + p.quickFoods.map(f => f.name).join(', ') + '. Reference these in use_what_works.' : ''}
+${whoopLatest ? 'Whoop health data (' + (whoopLatest.date || 'today') + '): ' + (whoopLatest.health_summary || '') + (whoopLatest.recovery_score != null ? ' | Recovery score: ' + whoopLatest.recovery_score + '%' : '') + (whoopLatest.hrv_ms != null ? ', HRV: ' + Math.round(whoopLatest.hrv_ms) + 'ms' : '') + (whoopLatest.rhr_bpm != null ? ', RHR: ' + whoopLatest.rhr_bpm + 'bpm' : '') + (whoopLatest.sleep_hours != null ? ', Sleep: ' + whoopLatest.sleep_hours + 'h (' + (whoopLatest.sleep_performance || '—') + '%)' : '') + (whoopLatest.day_strain != null ? ', Strain yesterday: ' + whoopLatest.day_strain : '') + '. Use recovery score to set day type (67+ = Push, 34-66 = Baseline, <34 = Recovery). Prioritize this data for day type classification.' : 'Whoop: not connected.'}
 
 Today so far: ${todayCal} calories, ${todayPro}g protein, ${water} oz water.
 Yesterday: ${yestCal} calories, ${yestPro}g protein, ${yest.water || 0} oz water.
@@ -2845,10 +2864,85 @@ function saveProfile() {
 }
 
 function saveWhoopCreds() {
-  const clientId = document.getElementById('whoopClientId').value.trim();
-  S.profiles[S.activeId].whoopClientId = clientId;
-  save();
-  toast('Client ID saved');
+  const clientId = document.getElementById('whoopClientId')?.value?.trim();
+  if (clientId) { S.profiles[S.activeId].whoopClientId = clientId; save(); toast('Client ID saved'); }
+}
+
+// ══════════════════════════════════════
+// WHOOP OAUTH
+// ══════════════════════════════════════
+
+let _whoopData = null; // { connected, latest, history } — loaded on init
+
+async function loadWhoopData() {
+  try {
+    const res = await fetch('/api/whoop-data');
+    if (!res.ok) return;
+    _whoopData = await res.json();
+    refreshWhoopUI();
+  } catch { /* non-fatal — app works without Whoop */ }
+}
+
+function refreshWhoopUI() {
+  if (!_whoopData) return;
+  const { connected, latest } = _whoopData;
+  const dot = document.getElementById('wDot');
+  const label = document.getElementById('whoopConnectLabel');
+  const disc = document.getElementById('whoopDisconnected');
+  const conn = document.getElementById('whoopConnected');
+  const metricsEl = document.getElementById('whoopLatestMetrics');
+  const briefRow = document.getElementById('briefWhoopRow');
+
+  if (connected) {
+    if (dot) { dot.style.background = 'var(--green-bright)'; dot.style.boxShadow = '0 0 6px var(--green-bright)'; }
+    if (label) label.textContent = 'Whoop — Connected';
+    if (disc) disc.style.display = 'none';
+    if (conn) conn.style.display = 'block';
+    if (briefRow) briefRow.style.display = 'flex';
+  } else {
+    if (dot) { dot.style.background = ''; dot.style.boxShadow = ''; }
+    if (label) label.textContent = 'Whoop';
+    if (disc) disc.style.display = 'block';
+    if (conn) conn.style.display = 'none';
+    if (briefRow) briefRow.style.display = 'none';
+    return;
+  }
+
+  if (!latest) return;
+
+  // Brief row metrics
+  const bwR = document.getElementById('bwR');
+  const bwH = document.getElementById('bwH');
+  const bwS = document.getElementById('bwS');
+  if (bwR) bwR.textContent = latest.recovery_score != null ? latest.recovery_score + '%' : '—';
+  if (bwH) bwH.textContent = latest.hrv_ms != null ? Math.round(latest.hrv_ms) + '' : '—';
+  if (bwS) bwS.textContent = latest.sleep_hours != null ? latest.sleep_hours + 'h' : '—';
+
+  // Profile card metrics
+  if (metricsEl) { metricsEl.style.display = 'block'; }
+  const wR = document.getElementById('wMetRecov');
+  const wH = document.getElementById('wMetHrv');
+  const wSl = document.getElementById('wMetSleep');
+  if (wR) { wR.textContent = latest.recovery_score != null ? latest.recovery_score + '%' : '—'; wR.style.color = recoveryColor(latest.recovery_score); }
+  if (wH) wH.textContent = latest.hrv_ms != null ? Math.round(latest.hrv_ms) + '' : '—';
+  if (wSl) wSl.textContent = latest.sleep_hours != null ? latest.sleep_hours + '' : '—';
+}
+
+function recoveryColor(score) {
+  if (score == null) return 'var(--cream)';
+  if (score >= 67) return 'var(--green-bright)';
+  if (score >= 34) return 'var(--amber)';
+  return 'var(--red)';
+}
+
+function connectWhoop() {
+  window.location.href = '/api/whoop-auth';
+}
+
+function disconnectWhoop() {
+  _whoopData = null;
+  refreshWhoopUI();
+  toast('Whoop disconnected');
 }
 
 // ══════════════════════════════════════
@@ -2912,6 +3006,20 @@ function initApp() {
   refreshHome();
   refreshLog();
   refreshProfile();
+  // Load Whoop health data from Supabase (non-blocking)
+  loadWhoopData();
+  // Handle OAuth redirect result
+  const params = new URLSearchParams(window.location.search);
+  const whoopStatus = params.get('whoop');
+  if (whoopStatus === 'connected') {
+    toast('Whoop connected. First sync at 5:30am.');
+    window.history.replaceState({}, '', '/');
+    // Reload Whoop data immediately to show connected state
+    setTimeout(loadWhoopData, 500);
+  } else if (whoopStatus === 'error') {
+    toast('Whoop connection failed. Check credentials in Netlify.', 'error');
+    window.history.replaceState({}, '', '/');
+  }
 }
 
 load();
