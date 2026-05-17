@@ -722,11 +722,24 @@ select, input, textarea, button { font-family: inherit; }
 .today-section { margin: 0 18px 16px; }
 .today-sec-lbl { display: flex; justify-content: space-between; align-items: center; font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.12em; color: var(--cream-muted); text-transform: uppercase; padding: 0 0 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
 .today-sec-count { background: var(--raised); border: 1px solid var(--border-warm); padding: 1px 7px; font-size: 9px; color: var(--cream-muted); }
-.today-item { background: var(--surface); border: 1px solid var(--border); padding: 10px 12px; margin-bottom: 6px; }
+.today-item { background: var(--surface); border: 1px solid var(--border); padding: 10px 12px; margin-bottom: 6px; cursor: pointer; transition: border-color 0.15s; }
+.today-item:hover { border-color: var(--border-warm); }
 .today-item-title { font-size: 13px; color: var(--cream); margin-bottom: 3px; line-height: 1.4; }
 .today-item-meta { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--cream-muted); letter-spacing: 0.04em; }
 .today-item-urgent { border-left: 2px solid var(--yellow); }
 .today-item-warn { border-left: 2px solid var(--amber); }
+.today-detail-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); z-index: 200; }
+.today-detail-overlay.open { display: flex; align-items: flex-end; }
+.today-detail-sheet { background: var(--surface); border-top: 1px solid var(--border-warm); width: 100%; max-height: 80vh; overflow-y: auto; padding: 20px 18px 36px; }
+.today-detail-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.today-detail-title { font-size: 15px; font-weight: 500; color: var(--cream); line-height: 1.4; flex: 1; margin-right: 12px; }
+.today-detail-close { font-size: 20px; color: var(--cream-muted); cursor: pointer; padding: 0 4px; line-height: 1; }
+.today-detail-meta { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--cream-muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 14px; }
+.today-detail-body { font-size: 13px; color: var(--cream-dim); line-height: 1.65; white-space: pre-wrap; margin-bottom: 18px; }
+.today-detail-url { font-size: 12px; color: var(--yellow); text-decoration: none; display: block; margin-bottom: 18px; word-break: break-all; }
+.today-done-btn { width: 100%; padding: 13px; background: transparent; border: 1px solid var(--border-warm); color: var(--cream); font-size: 13px; cursor: pointer; font-family: inherit; letter-spacing: 0.03em; }
+.today-done-btn:active { opacity: 0.7; }
+.today-done-btn.done-working { opacity: 0.45; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -1402,6 +1415,20 @@ select, input, textarea, button { font-family: inherit; }
     <button class="nb" id="nb-carlos" onclick="nav('carlos')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><div class="nb-lbl">Carlos</div></button>
     <button class="nb" id="nb-log" onclick="nav('log')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M12 6v6l4 2"/></svg><div class="nb-lbl">Log</div></button>
     <button class="nb" id="nb-profile" onclick="nav('profile')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><div class="nb-lbl">Profile</div></button>
+  </div>
+</div>
+
+<!-- TODAY DETAIL MODAL -->
+<div class="today-detail-overlay" id="todayDetailOverlay" onclick="todayCloseDetail(event)">
+  <div class="today-detail-sheet" onclick="event.stopPropagation()">
+    <div class="today-detail-hdr">
+      <div class="today-detail-title" id="todayDetailTitle"></div>
+      <div class="today-detail-close" onclick="todayCloseDetail()">✕</div>
+    </div>
+    <div class="today-detail-meta" id="todayDetailMeta"></div>
+    <div class="today-detail-body" id="todayDetailBody"></div>
+    <a class="today-detail-url" id="todayDetailUrl" target="_blank" rel="noopener noreferrer"></a>
+    <button class="today-done-btn" id="todayDoneBtn" onclick="todayMarkDone()">Mark done</button>
   </div>
 </div>
 
@@ -2266,10 +2293,63 @@ function refreshHome() {
   }
 }
 
+let _todayItems = [];
+
+function todayOpenDetail(idx) {
+  const item = _todayItems[idx];
+  if (!item) return;
+  document.getElementById('todayDetailTitle').textContent = item.title || '';
+  document.getElementById('todayDetailMeta').textContent = item.meta || '';
+  document.getElementById('todayDetailBody').textContent = item.detail || '';
+  const urlEl = document.getElementById('todayDetailUrl');
+  if (item.url) { urlEl.href = item.url; urlEl.textContent = item.url; urlEl.style.display = 'block'; }
+  else { urlEl.style.display = 'none'; urlEl.href = ''; }
+  const doneBtn = document.getElementById('todayDoneBtn');
+  doneBtn.dataset.idx = idx;
+  doneBtn.textContent = 'Mark done';
+  doneBtn.classList.remove('done-working');
+  doneBtn.style.display = item.notionPageId ? 'block' : 'none';
+  document.getElementById('todayDetailOverlay').classList.add('open');
+}
+
+function todayCloseDetail(e) {
+  if (e && e.target !== document.getElementById('todayDetailOverlay')) return;
+  document.getElementById('todayDetailOverlay').classList.remove('open');
+}
+
+async function todayMarkDone() {
+  const btn = document.getElementById('todayDoneBtn');
+  const idx = parseInt(btn.dataset.idx, 10);
+  const item = _todayItems[idx];
+  if (!item?.notionPageId) return;
+  btn.classList.add('done-working');
+  btn.textContent = 'Marking done…';
+  try {
+    const res = await fetch('/.netlify/functions/today-mark-done', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pageId: item.notionPageId }),
+    });
+    if (!res.ok) throw new Error('mark-done ' + res.status);
+    document.querySelector(`[data-today-idx="${idx}"]`)?.remove();
+    document.querySelectorAll('.today-section').forEach(sec => {
+      const remaining = sec.querySelectorAll('.today-item').length;
+      if (!remaining) sec.style.display = 'none';
+      const cnt = sec.querySelector('.today-sec-count');
+      if (cnt) cnt.textContent = remaining;
+    });
+    document.getElementById('todayDetailOverlay').classList.remove('open');
+  } catch {
+    btn.classList.remove('done-working');
+    btn.textContent = 'Mark done';
+  }
+}
+
 async function refreshToday() {
   const loadEl = document.getElementById('todayLoading');
   const contentEl = document.getElementById('todayContent');
   const emptyEl = document.getElementById('todayEmpty');
+  _todayItems = [];
   loadEl.style.display = 'block'; contentEl.style.display = 'none';
 
   try {
@@ -2294,12 +2374,14 @@ async function refreshToday() {
       anyVisible = true;
       sec.style.display = 'block';
       countEl.textContent = items.length;
-      listEl.innerHTML = items.map(item =>
-        `<div class="today-item ${item.urgent ? 'today-item-urgent' : item.warn ? 'today-item-warn' : ''}">
-          <div class="today-item-title">${item.title || item.content || ''}</div>
-          ${item.meta ? `<div class="today-item-meta">${item.meta}</div>` : ''}
-        </div>`
-      ).join('');
+      listEl.innerHTML = items.map(item => {
+        const idx = _todayItems.push(item) - 1;
+        const cls = item.urgent ? 'today-item-urgent' : item.warn ? 'today-item-warn' : '';
+        return `<div class="today-item ${cls}" data-today-idx="${idx}" onclick="todayOpenDetail(${idx})">` +
+          `<div class="today-item-title">${item.title || ''}</div>` +
+          (item.meta ? `<div class="today-item-meta">${item.meta}</div>` : '') +
+          `</div>`;
+      }).join('');
     });
 
     emptyEl.style.display = anyVisible ? 'none' : 'block';
