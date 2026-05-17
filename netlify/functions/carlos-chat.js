@@ -2,6 +2,38 @@
 // Classifies intent → fetches context → executes side effects → calls Claude
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// ── Memory cache (refreshes weekly — memory changes slowly) ──────────────────
+let _memoryCache = null;
+let _memoryCacheAt = 0;
+const MEMORY_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
+
+async function fetchCarlosMemory() {
+  const now = Date.now();
+  if (_memoryCache && now - _memoryCacheAt < MEMORY_CACHE_TTL_MS) return _memoryCache;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+
+  try {
+    const [truthsRes, contextRes, philosophyRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/stable_truths?order=confidence_score.desc&limit=10&select=truth_statement,category,confidence_score`,
+        { headers: { Authorization: `Bearer ${SUPABASE_KEY}`, apikey: SUPABASE_KEY } }),
+      fetch(`${SUPABASE_URL}/rest/v1/active_context?status=eq.active&order=priority.desc&limit=8&select=context_item,priority,related_topics`,
+        { headers: { Authorization: `Bearer ${SUPABASE_KEY}`, apikey: SUPABASE_KEY } }),
+      fetch(`${SUPABASE_URL}/rest/v1/philosophy_anchors?order=frequency_score.desc&limit=8&select=anchor_text,category,frequency_score`,
+        { headers: { Authorization: `Bearer ${SUPABASE_KEY}`, apikey: SUPABASE_KEY } }),
+    ]);
+
+    const [truths, activeCtx, philosophies] = await Promise.all([
+      truthsRes.ok ? truthsRes.json() : [],
+      contextRes.ok ? contextRes.json() : [],
+      philosophyRes.ok ? philosophyRes.json() : [],
+    ]);
+
+    _memoryCache = { truths, activeCtx, philosophies };
+    _memoryCacheAt = now;
+    return _memoryCache;
+  } catch { return null; }
+}
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_BASE = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
 const RAG_BASE_URL = process.env.RAG_BASE_URL || 'https://rag-command-center.onrender.com';
@@ -177,7 +209,30 @@ async function triggerWindmill(scriptPath, args) {
 
 // ── Prompt builder ────────────────────────────────────────────────────────────
 
-function buildSystemPrompt({ profile, health, business, persona, agentOutputs, morningBrief, intent }) {
+function buildMemoryBlock(memory) {
+  if (!memory) return null;
+  const { truths = [], activeCtx = [], philosophies = [] } = memory;
+  const lines = [];
+
+  if (philosophies.length > 0) {
+    lines.push('## Core Operating Philosophies');
+    philosophies.slice(0, 6).forEach(p => lines.push(`- ${p.anchor_text}`));
+  }
+
+  if (truths.length > 0) {
+    lines.push('\n## Stable Truths About Chris');
+    truths.slice(0, 6).forEach(t => lines.push(`- ${t.truth_statement}`));
+  }
+
+  if (activeCtx.length > 0) {
+    lines.push('\n## Currently Front of Mind');
+    activeCtx.slice(0, 5).forEach(c => lines.push(`- [P${c.priority}] ${c.context_item}`));
+  }
+
+  return lines.length > 0 ? lines.join('\n') : null;
+}
+
+function buildSystemPrompt({ profile, health, business, persona, agentOutputs, morningBrief, intent, memory }) {
   const parts = [];
 
   // Persona
@@ -252,6 +307,12 @@ You are Carlos. Not an AI assistant — an operator. You know ${profile.name || 
     parts.push(`## Recent Automation Outputs (last 24h)\n${lines}`);
   }
 
+  // Memory context — stable truths and philosophy inject Carlos's long-term knowledge of Chris
+  const memoryBlock = buildMemoryBlock(memory);
+  if (memoryBlock) {
+    parts.push(`## What Carlos Knows About Chris (Long-Term Memory)\n${memoryBlock}`);
+  }
+
   // Intent-specific guidance
   const intentGuide = {
     food_log: 'The food log action has already been executed. Confirm what was logged in one natural sentence. Mention estimated protein if the items have a reasonable protein content. Keep it to 1-2 sentences.',
@@ -323,12 +384,13 @@ exports.handler = async function(event) {
     const needsBusiness = ['business_query', 'general_chat'].includes(intent);
     const needsOutputs = intent === 'general_chat';
 
-    const [health, business, persona, agentOutputs, morningBrief] = await Promise.all([
+    const [health, business, persona, agentOutputs, morningBrief, memory] = await Promise.all([
       needsHealth ? fetchHealthContext() : Promise.resolve(null),
       needsBusiness ? fetchBusinessContext(brandContext) : Promise.resolve(null),
       fetchPersonaFull(),
       needsOutputs ? fetchRecentAgentOutputs() : Promise.resolve([]),
       needsOutputs ? fetchRecentMorningBrief() : Promise.resolve(null),
+      fetchCarlosMemory(),
     ]);
 
     // Execute side effects before generating response
@@ -352,7 +414,7 @@ exports.handler = async function(event) {
       actions.push({ type: 'label_check', status: jobId ? 'triggered' : 'failed', source: 'windmill', jobId, product });
     }
 
-    const systemPrompt = buildSystemPrompt({ profile, health, business, persona, agentOutputs, morningBrief, intent });
+    const systemPrompt = buildSystemPrompt({ profile, health, business, persona, agentOutputs, morningBrief, intent, memory });
     const reply = await callClaude(systemPrompt, message, conversationHistory);
 
     // Spoken preview: first 1-2 sentences
@@ -374,6 +436,7 @@ exports.handler = async function(event) {
           business: !!(business && business.length),
           agentOutputs: (agentOutputs || []).length > 0,
           morningBrief: !!morningBrief,
+          memory: !!(memory && (memory.truths?.length || memory.philosophies?.length)),
         },
       }),
     };
