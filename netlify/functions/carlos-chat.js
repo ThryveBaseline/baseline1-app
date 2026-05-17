@@ -3,6 +3,7 @@
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+const ANTHROPIC_BASE = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
 const RAG_BASE_URL = process.env.RAG_BASE_URL || 'https://rag-command-center.onrender.com';
 const WINDMILL_BASE = process.env.WINDMILL_BASE_URL || 'https://windmill-server-production-1d21.up.railway.app';
 const WINDMILL_TOKEN = process.env.WINDMILL_TOKEN;
@@ -120,7 +121,7 @@ async function fetchRecentMorningBrief() {
 async function parseFoodItems(message) {
   if (!ANTHROPIC_KEY) return [{ name: message.slice(0, 80), calories_est: null, protein_est: null }];
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(`${ANTHROPIC_BASE}/v1/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
@@ -279,7 +280,7 @@ async function callClaude(systemPrompt, message, history) {
   // (~3KB static) is cached after the first call, saving ~90% of input tokens on
   // subsequent turns in the same conversation.
   const system = [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }];
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch(`${ANTHROPIC_BASE}/v1/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

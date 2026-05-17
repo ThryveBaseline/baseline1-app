@@ -16,6 +16,7 @@ exports.handler = async function(event, context) {
   }
 
   const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  const ANTHROPIC_BASE = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
 
   if (!ANTHROPIC_API_KEY) {
     return {
@@ -28,7 +29,7 @@ exports.handler = async function(event, context) {
   try {
     const body = JSON.parse(event.body);
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(`${ANTHROPIC_BASE}/v1/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
