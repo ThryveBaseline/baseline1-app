@@ -657,6 +657,8 @@ body::before { content: ''; position: fixed; inset: 0; background-image: url("da
 .carlos-mic { width: 38px; height: 38px; background: var(--raised); border: 1px solid var(--border-warm); color: var(--cream-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
 .carlos-mic:hover { border-color: var(--blue); color: var(--blue); }
 .carlos-mic.listening { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); animation: pulse 1s ease infinite; }
+.carlos-mic.conversation-mode { border-color: var(--green-bright); color: var(--green-bright); background: rgba(0,200,120,0.08); }
+.carlos-mic.conversation-mode.listening { border-color: var(--green-bright); color: var(--green-bright); background: rgba(0,200,120,0.15); animation: pulse 1s ease infinite; }
 .carlos-send { width: 38px; height: 38px; background: var(--yellow); border: none; color: #0f0a06; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
 .carlos-send:hover { background: #e4ff00; }
 .carlos-send:disabled { background: var(--elevated); color: var(--cream-muted); cursor: not-allowed; }
@@ -1205,6 +1207,19 @@ select, input, textarea, button { font-family: inherit; }
               </div>
             </div>
             <button class="btn-g" onclick="saveTone()">Save Preference</button>
+          </div>
+        </div>
+
+        <!-- CARLOS VOICE -->
+        <div class="p-sec"><div class="p-sec-hd" onclick="toggleSec('voice')"><div class="psh-l"><div class="psh-icon">🎙</div><div class="psh-lbl">Carlos Voice</div></div><div class="psh-arr" id="pa-voice">›</div></div>
+          <div class="p-sec-body" id="pb-voice">
+            <div style="font-size:12px;color:var(--cream-muted);margin-bottom:12px;font-weight:300;line-height:1.6;">Carlos uses ElevenLabs for voice responses. Tap the mic button in the Carlos tab to enter conversation mode — Carlos will listen and respond in audio automatically.</div>
+            <div class="p-field"><label class="fl">ElevenLabs Voice ID</label><input type="text" class="fi" id="p-voice-id" placeholder="e.g. F2uBj6ZNNG9Ub2poNhvS" spellcheck="false" autocorrect="off" autocapitalize="off"></div>
+            <div style="font-size:11px;color:var(--cream-muted);margin-bottom:14px;line-height:1.5;">Find voice IDs at elevenlabs.io → Voice Library → click a voice → copy the ID from the URL or "Use" dialog.</div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn-g" onclick="saveCarlosVoice()" style="flex:1;">Save Voice</button>
+              <button class="btn-g" onclick="testCarlosVoice()" style="flex:1;background:var(--raised);color:var(--cream);">Test Voice</button>
+            </div>
           </div>
         </div>
 
@@ -3022,7 +3037,13 @@ function toggleSec(id) {
   const open = body.classList.contains('open');
   document.querySelectorAll('.p-sec-body').forEach(b => b.classList.remove('open'));
   document.querySelectorAll('.psh-arr').forEach(a => a.classList.remove('open'));
-  if (!open) { body.classList.add('open'); arrow.classList.add('open'); }
+  if (!open) {
+    body.classList.add('open'); arrow.classList.add('open');
+    if (id === 'voice') {
+      const inp = document.getElementById('p-voice-id');
+      if (inp && !inp.value) inp.value = getP().carlosVoiceId || '';
+    }
+  }
 }
 
 function toggleWhoopSetup() {
@@ -3051,6 +3072,27 @@ function saveProfile() {
   document.querySelectorAll('.p-sec-body').forEach(b => b.classList.remove('open'));
   document.querySelectorAll('.psh-arr').forEach(a => a.classList.remove('open'));
   toast('Profile saved');
+}
+
+function saveCarlosVoice() {
+  const voiceId = (document.getElementById('p-voice-id')?.value || '').trim();
+  S.profiles[S.activeId] = { ...S.profiles[S.activeId], carlosVoiceId: voiceId };
+  save();
+  document.querySelectorAll('.p-sec-body').forEach(b => b.classList.remove('open'));
+  document.querySelectorAll('.psh-arr').forEach(a => a.classList.remove('open'));
+  toast('Carlos voice saved');
+}
+
+async function testCarlosVoice() {
+  const inp = document.getElementById('p-voice-id');
+  const voiceId = (inp?.value || '').trim() || getP().carlosVoiceId;
+  if (!voiceId) { toast('Enter a voice ID first', 'warn'); return; }
+  // Temporarily write to profile so carlosSpeak picks it up
+  const prev = getP().carlosVoiceId;
+  S.profiles[S.activeId].carlosVoiceId = voiceId;
+  toast('Testing voice…');
+  await carlosSpeak("Hey — Carlos here. Voice is working.");
+  S.profiles[S.activeId].carlosVoiceId = prev; // restore until saved
 }
 
 function saveWhoopCreds() {
@@ -3273,6 +3315,9 @@ const CARLOS = {
   pendingMsgEl: null,
   speechSupported: !!(window.SpeechRecognition || window.webkitSpeechRecognition) && (location.protocol === 'https:' || location.hostname === 'localhost'),
   synthSupported: !!window.speechSynthesis,
+  conversationMode: false,
+  isPlaying: false,
+  currentAudio: null,
 };
 
 const CARLOS_STARTERS = [
@@ -3423,7 +3468,7 @@ function carlosShowPreview(preview, fullReply, actions, intent) {
 
 function carlosAcceptPreview() {
   document.getElementById('carlosPreviewGate').classList.remove('visible');
-  window.speechSynthesis?.cancel();
+  carlosStopAudio();
   if (!CARLOS.pendingReply) return;
   const { fullReply, actions, intent } = CARLOS.pendingReply;
   CARLOS.pendingReply = null;
@@ -3432,7 +3477,7 @@ function carlosAcceptPreview() {
 }
 
 function carlosRegenTone() {
-  window.speechSynthesis?.cancel();
+  carlosStopAudio();
   document.getElementById('carlosPreviewGate').classList.remove('visible');
   if (!CARLOS.pendingReply) return;
   const { fullReply, actions, intent } = CARLOS.pendingReply;
@@ -3443,23 +3488,83 @@ function carlosRegenTone() {
   carlosSendRaw((orig || 'previous message') + ' [respond more conversationally]');
 }
 
-// ── Speech synthesis ──────────────────────────────────────────────────────────
+// ── Speech synthesis (ElevenLabs + browser fallback) ─────────────────────────
 
-function carlosSpeak(text) {
-  if (!CARLOS.synthSupported) return;
-  window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.rate = 1.0;
-  utt.pitch = 0.95;
-  utt.volume = 1;
-  window.speechSynthesis.speak(utt);
+function carlosStopAudio() {
+  if (CARLOS.currentAudio) { CARLOS.currentAudio.pause(); CARLOS.currentAudio = null; }
+  CARLOS.isPlaying = false;
+  window.speechSynthesis?.cancel();
+}
+
+async function carlosSpeak(text) {
+  if (!text) return;
+  carlosStopAudio();
+  try {
+    const voiceId = getP().carlosVoiceId || '';
+    const res = await fetch('/api/elevenlabs-tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text.slice(0, 800), voiceId }),
+    });
+    if (!res.ok) throw new Error('TTS ' + res.status);
+    const { audio } = await res.json();
+    if (!audio) throw new Error('No audio');
+    const binary = atob(audio);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'audio/mpeg' });
+    const url = URL.createObjectURL(blob);
+    return new Promise((resolve) => {
+      const audioEl = new Audio(url);
+      CARLOS.currentAudio = audioEl;
+      CARLOS.isPlaying = true;
+      const cleanup = () => {
+        URL.revokeObjectURL(url);
+        CARLOS.isPlaying = false;
+        if (CARLOS.currentAudio === audioEl) CARLOS.currentAudio = null;
+        resolve();
+      };
+      audioEl.onended = cleanup;
+      audioEl.onerror = cleanup;
+      audioEl.play().catch(cleanup);
+    });
+  } catch {
+    // Fallback to browser speech synthesis
+    if (!CARLOS.synthSupported) return;
+    return new Promise((resolve) => {
+      const utt = new SpeechSynthesisUtterance(text.slice(0, 300));
+      utt.rate = 1.0; utt.pitch = 0.95;
+      utt.onend = resolve; utt.onerror = resolve;
+      window.speechSynthesis.speak(utt);
+    });
+  }
 }
 
 // ── Speech recognition ────────────────────────────────────────────────────────
 
 function carlosToggleMic() {
   if (!CARLOS.speechSupported) { toast('Voice input not supported in this browser', 'warn'); return; }
-  if (CARLOS.isListening) { carlosStopMic(); } else { carlosStartMic(); }
+  if (CARLOS.conversationMode) { carlosExitConversation(); } else { carlosEnterConversation(); }
+}
+
+function carlosEnterConversation() {
+  CARLOS.conversationMode = true;
+  document.getElementById('carlosMic').classList.add('conversation-mode');
+  toast('Conversation mode — speak anytime. Tap mic to stop.', 'info');
+  carlosStartMic();
+}
+
+function carlosExitConversation() {
+  CARLOS.conversationMode = false;
+  const mic = document.getElementById('carlosMic');
+  mic.classList.remove('conversation-mode');
+  mic.classList.remove('listening');
+  CARLOS.recognition?.stop();
+  CARLOS.isListening = false;
+  carlosStopAudio();
+  carlosClearChip();
+  carlosSetStatus('Ready');
+  toast('Conversation ended', 'info');
 }
 
 function carlosStartMic() {
@@ -3497,12 +3602,18 @@ function carlosStartMic() {
     CARLOS.isListening = false;
     mic.classList.remove('listening');
     carlosClearChip();
-    carlosSetStatus('Ready');
     if (finalTranscript.trim()) {
       input.value = finalTranscript.trim();
       carlosInputResize(input);
-      // On iOS, auto-send because there's no interim feedback to confirm
-      if (isIOS) setTimeout(() => carlosSend(), 100);
+      carlosSetStatus('Ready');
+      // Auto-send in conversation mode or on iOS (no manual submit in those flows)
+      if (CARLOS.conversationMode || isIOS) setTimeout(() => carlosSend(), 100);
+    } else if (CARLOS.conversationMode && !CARLOS.isBusy) {
+      // No speech detected — restart listening
+      carlosSetStatus('Ready');
+      setTimeout(() => { if (CARLOS.conversationMode && !CARLOS.isBusy) carlosStartMic(); }, 600);
+    } else {
+      carlosSetStatus('Ready');
     }
   };
 
@@ -3604,8 +3715,16 @@ async function carlosSendRaw(text) {
     const data = await res.json();
     const { reply, spokenPreview, actions, intent } = data;
 
-    // Show voice preview gate if speech is available
-    if (CARLOS.synthSupported && spokenPreview) {
+    if (CARLOS.conversationMode) {
+      // Conversation mode: render text immediately, play full ElevenLabs audio, restart mic after
+      carlosRenderCarlos(reply, actions, intent);
+      CARLOS.thread.push({ role: 'assistant', content: reply });
+      carlosSetStatus('Speaking…');
+      carlosShowChip('Speaking', 'thinking');
+      await carlosSpeak(reply);
+      carlosClearChip();
+    } else if (spokenPreview) {
+      // Text mode with voice preview gate
       carlosSetStatus('Speaking preview…');
       carlosShowPreview(spokenPreview, reply, actions, intent);
     } else {
@@ -3623,6 +3742,8 @@ async function carlosSendRaw(text) {
   } finally {
     CARLOS.isBusy = false;
     document.getElementById('carlosSend').disabled = false;
+    // Restart mic after Carlos finishes speaking (conversation mode)
+    if (CARLOS.conversationMode) carlosStartMic();
   }
 }
 </script>
