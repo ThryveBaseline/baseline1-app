@@ -662,6 +662,14 @@ body::before { content: ''; position: fixed; inset: 0; background-image: url("da
 .carlos-send { width: 38px; height: 38px; background: var(--yellow); border: none; color: #0f0a06; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
 .carlos-send:hover { background: #e4ff00; }
 .carlos-send:disabled { background: var(--elevated); color: var(--cream-muted); cursor: not-allowed; }
+.carlos-conv { width: 38px; height: 38px; background: var(--raised); border: 1px solid var(--border-warm); color: var(--cream-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+.carlos-conv:hover { border-color: var(--green-bright); color: var(--green-bright); }
+.carlos-conv.active { border-color: var(--green-bright); color: var(--green-bright); background: var(--green-dim); }
+.carlos-conv.active.listening { animation: pulse 1s ease infinite; }
+.brief-read-row { padding: 0 16px 10px; }
+.brief-read-btn { width: 100%; background: none; border: 1px solid var(--border-green); color: var(--green-bright); padding: 9px 14px; font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 7px; }
+.brief-read-btn:hover { background: var(--green-dim); }
+.brief-read-btn.speaking { background: var(--green-dim); opacity: 0.8; }
 @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.4); } 50% { box-shadow: 0 0 0 6px rgba(59,130,246,0); } }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -870,6 +878,12 @@ select, input, textarea, button { font-family: inherit; }
           <div class="use-what-works" id="useWhatWorks" style="display:none;">
             <div class="uww-lbl">Use what works</div>
             <div class="uww-items" id="uwwItems"></div>
+          </div>
+          <div class="brief-read-row">
+            <button class="brief-read-btn" id="briefReadBtn" onclick="briefReadAloud()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+              Read to me
+            </button>
           </div>
           <div class="brief-actions">
             <div class="brief-act" onclick="openDnfle()"><div class="brief-act-icon">🍽️</div><div class="brief-act-lbl">Not Hungry</div></div>
@@ -1213,7 +1227,15 @@ select, input, textarea, button { font-family: inherit; }
         <!-- CARLOS VOICE -->
         <div class="p-sec"><div class="p-sec-hd" onclick="toggleSec('voice')"><div class="psh-l"><div class="psh-icon">🎙</div><div class="psh-lbl">Carlos Voice</div></div><div class="psh-arr" id="pa-voice">›</div></div>
           <div class="p-sec-body" id="pb-voice">
-            <div style="font-size:12px;color:var(--cream-muted);margin-bottom:12px;font-weight:300;line-height:1.6;">Carlos uses ElevenLabs for voice responses. Tap the mic button in the Carlos tab to enter conversation mode — Carlos will listen and respond in audio automatically.</div>
+            <div style="font-size:12px;color:var(--cream-muted);margin-bottom:14px;font-weight:300;line-height:1.6;">Audio is always opt-in. Type = text response. Tap mic = voice response. Conversation button = continuous voice loop.</div>
+            <div class="p-field"><label class="fl">Morning Brief Delivery</label>
+              <select class="fs" id="p-brief-delivery" onchange="saveBriefDelivery()">
+                <option value="text">Text only — no audio</option>
+                <option value="ondemand">Audio on demand — "Read to me" button</option>
+                <option value="auto">Auto audio — plays when brief opens</option>
+              </select>
+            </div>
+            <div style="font-size:11px;color:var(--cream-muted);margin-bottom:16px;line-height:1.5;">Auto audio respects device volume and silent mode.</div>
             <div class="p-field"><label class="fl">ElevenLabs Voice ID</label><input type="text" class="fi" id="p-voice-id" placeholder="e.g. F2uBj6ZNNG9Ub2poNhvS" spellcheck="false" autocorrect="off" autocapitalize="off"></div>
             <div style="font-size:11px;color:var(--cream-muted);margin-bottom:14px;line-height:1.5;">Find voice IDs at elevenlabs.io → Voice Library → click a voice → copy the ID from the URL or "Use" dialog.</div>
             <div style="display:flex;gap:8px;">
@@ -1304,8 +1326,11 @@ select, input, textarea, button { font-family: inherit; }
         <div class="carlos-status-row" id="carlosStatusRow"></div>
         <div class="carlos-input-row">
           <textarea class="carlos-input" id="carlosInput" placeholder="Ask Carlos anything…" rows="1" onkeydown="carlosInputKeydown(event)" oninput="carlosInputResize(this)"></textarea>
-          <button class="carlos-mic" id="carlosMic" onclick="carlosToggleMic()" title="Voice input">
+          <button class="carlos-mic" id="carlosMic" onclick="carlosSingleShotMic()" title="Single shot voice — tap to speak once">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+          <button class="carlos-conv" id="carlosConvBtn" onclick="carlosToggleConversation()" title="Conversation mode — continuous voice loop">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           </button>
           <button class="carlos-send" id="carlosSend" onclick="carlosSend()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -1716,6 +1741,8 @@ function addProfile() {
 let currentBriefWins = [];
 
 async function generateBrief() {
+  // Unlock AudioContext during this gesture so auto-play works after async generation
+  if ((getP().briefDelivery || 'text') === 'auto') unlockAudio();
   document.getElementById('briefEmpty').style.display = 'none';
   document.getElementById('briefLoading').style.display = 'flex';
   document.getElementById('briefContent').style.display = 'none';
@@ -1928,6 +1955,12 @@ function renderBrief(data) {
   window.currentGroceryList = data.grocery_list || [];
   document.getElementById('briefLoading').style.display = 'none';
   document.getElementById('briefContent').style.display = 'block';
+
+  // Auto-play if preference is set (AudioContext was unlocked in generateBrief)
+  if ((getP().briefDelivery || 'text') === 'auto') {
+    const autoText = [data.reality, data.truth].filter(Boolean).join(' ');
+    if (autoText) setTimeout(() => carlosSpeak(autoText), 400);
+  }
 }
 
 function renderBriefFromHistory(brief, wins) {
@@ -3042,6 +3075,8 @@ function toggleSec(id) {
     if (id === 'voice') {
       const inp = document.getElementById('p-voice-id');
       if (inp && !inp.value) inp.value = getP().carlosVoiceId || '';
+      const sel = document.getElementById('p-brief-delivery');
+      if (sel) sel.value = getP().briefDelivery || 'text';
     }
   }
 }
@@ -3324,7 +3359,7 @@ const CARLOS = {
   pendingMsgEl: null,
   speechSupported: !!(window.SpeechRecognition || window.webkitSpeechRecognition) && (location.protocol === 'https:' || location.hostname === 'localhost'),
   synthSupported: !!window.speechSynthesis,
-  conversationMode: false,
+  voiceMode: null,       // null | 'single' | 'conversation' — set when mic is active
   isPlaying: false,
   currentSource: null,  // AudioContext BufferSourceNode
 };
@@ -3564,30 +3599,72 @@ async function carlosSpeak(text) {
 
 // ── Speech recognition ────────────────────────────────────────────────────────
 
-function carlosToggleMic() {
+// Single shot: tap mic → listen → auto-send → Carlos responds in audio → done
+function carlosSingleShotMic() {
   if (!CARLOS.speechSupported) { toast('Voice input not supported in this browser', 'warn'); return; }
-  if (CARLOS.conversationMode) { carlosExitConversation(); } else { carlosEnterConversation(); }
-}
-
-function carlosEnterConversation() {
-  unlockAudio(); // unlock AudioContext on this user gesture before async playback
-  CARLOS.conversationMode = true;
-  document.getElementById('carlosMic').classList.add('conversation-mode');
-  toast('Conversation mode — speak anytime. Tap mic to stop.', 'info');
+  if (CARLOS.isListening) { CARLOS.recognition?.stop(); return; } // tap again to cancel
+  unlockAudio();
+  CARLOS.voiceMode = 'single';
   carlosStartMic();
 }
 
+// Conversation: continuous loop until toggled off
+function carlosToggleConversation() {
+  if (!CARLOS.speechSupported) { toast('Voice input not supported in this browser', 'warn'); return; }
+  if (CARLOS.voiceMode === 'conversation') {
+    carlosExitConversation();
+  } else {
+    unlockAudio();
+    CARLOS.voiceMode = 'conversation';
+    document.getElementById('carlosConvBtn').classList.add('active');
+    toast('Conversation mode — speak anytime. Tap again to end.', 'info');
+    carlosStartMic();
+  }
+}
+
 function carlosExitConversation() {
-  CARLOS.conversationMode = false;
-  const mic = document.getElementById('carlosMic');
-  mic.classList.remove('conversation-mode');
-  mic.classList.remove('listening');
+  CARLOS.voiceMode = null;
+  document.getElementById('carlosConvBtn').classList.remove('active');
+  document.getElementById('carlosMic').classList.remove('listening');
   CARLOS.recognition?.stop();
   CARLOS.isListening = false;
   carlosStopAudio();
   carlosClearChip();
   carlosSetStatus('Ready');
   toast('Conversation ended', 'info');
+}
+
+// ── Brief read aloud ──────────────────────────────────────────────────────────
+
+async function briefReadAloud() {
+  unlockAudio();
+  const reality = document.getElementById('briefReality')?.textContent || '';
+  const truth = document.getElementById('briefTruth')?.textContent || '';
+  const wins = Array.from(document.querySelectorAll('#winsList .win-text')).map(el => el.textContent);
+  const text = [reality, truth, ...wins].filter(Boolean).join(' ');
+  if (!text.trim()) { toast('No brief content to read', 'warn'); return; }
+
+  // Remember that user wanted audio — bump to ondemand if they were text-only
+  const p = getP();
+  if (!p.briefDelivery || p.briefDelivery === 'text') {
+    S.profiles[S.activeId] = { ...p, briefDelivery: 'ondemand' };
+    save();
+    const sel = document.getElementById('p-brief-delivery');
+    if (sel) sel.value = 'ondemand';
+  }
+
+  const btn = document.getElementById('briefReadBtn');
+  const originalHTML = btn?.innerHTML;
+  if (btn) { btn.classList.add('speaking'); btn.textContent = 'Speaking…'; }
+  await carlosSpeak(text);
+  if (btn) { btn.classList.remove('speaking'); btn.innerHTML = originalHTML; }
+}
+
+function saveBriefDelivery() {
+  const val = document.getElementById('p-brief-delivery')?.value || 'text';
+  S.profiles[S.activeId] = { ...S.profiles[S.activeId], briefDelivery: val };
+  save();
+  toast('Brief delivery preference saved');
 }
 
 function carlosStartMic() {
@@ -3629,13 +3706,15 @@ function carlosStartMic() {
       input.value = finalTranscript.trim();
       carlosInputResize(input);
       carlosSetStatus('Ready');
-      // Auto-send in conversation mode or on iOS (no manual submit in those flows)
-      if (CARLOS.conversationMode || isIOS) setTimeout(() => carlosSend(), 100);
-    } else if (CARLOS.conversationMode && !CARLOS.isBusy) {
-      // No speech detected — restart listening
+      // Auto-send whenever mic was used (voice input → voice response)
+      if (CARLOS.voiceMode || isIOS) setTimeout(() => carlosSend(true), 100);
+    } else if (CARLOS.voiceMode === 'conversation' && !CARLOS.isBusy) {
+      // No speech — restart listening in conversation mode
       carlosSetStatus('Ready');
-      setTimeout(() => { if (CARLOS.conversationMode && !CARLOS.isBusy) carlosStartMic(); }, 600);
+      setTimeout(() => { if (CARLOS.voiceMode === 'conversation' && !CARLOS.isBusy) carlosStartMic(); }, 600);
     } else {
+      // No transcript, not in conversation mode — reset single shot
+      if (CARLOS.voiceMode === 'single') CARLOS.voiceMode = null;
       carlosSetStatus('Ready');
     }
   };
@@ -3676,19 +3755,20 @@ function carlosStopMic() {
 
 // ── Send message ──────────────────────────────────────────────────────────────
 
-async function carlosSend() {
-  unlockAudio(); // unlock AudioContext on send gesture so async EL playback works
+async function carlosSend(fromVoice = false) {
+  unlockAudio();
   const input = document.getElementById('carlosInput');
   const text = input.value.trim();
   if (!text || CARLOS.isBusy) return;
   input.value = '';
   carlosInputResize(input);
-  carlosSendRaw(text);
+  carlosSendRaw(text, fromVoice);
 }
 
-async function carlosSendRaw(text) {
+async function carlosSendRaw(text, fromVoice = false) {
   if (CARLOS.isBusy) return;
   CARLOS.isBusy = true;
+  const capturedVoiceMode = CARLOS.voiceMode; // capture before any awaits
   document.getElementById('carlosSend').disabled = true;
 
   // Remove welcome screen on first message
@@ -3742,15 +3822,12 @@ async function carlosSendRaw(text) {
     carlosRenderCarlos(reply, actions, intent);
     CARLOS.thread.push({ role: 'assistant', content: reply });
 
-    if (CARLOS.conversationMode) {
-      // Conversation mode: await full audio, then restart mic
+    // Voice input → voice response. Text input → text only (no audio).
+    if (fromVoice) {
       carlosSetStatus('Speaking…');
       carlosShowChip('Speaking', 'thinking');
       await carlosSpeak(reply);
       carlosClearChip();
-    } else if (spokenPreview) {
-      // Text mode: response already rendered, play preview audio in background
-      carlosSpeak(spokenPreview);
     }
 
     carlosSetStatus('Ready');
@@ -3763,8 +3840,11 @@ async function carlosSendRaw(text) {
   } finally {
     CARLOS.isBusy = false;
     document.getElementById('carlosSend').disabled = false;
-    // Restart mic after Carlos finishes speaking (conversation mode)
-    if (CARLOS.conversationMode) carlosStartMic();
+    if (capturedVoiceMode === 'conversation') {
+      carlosStartMic(); // loop back for next turn
+    } else if (capturedVoiceMode === 'single') {
+      CARLOS.voiceMode = null; // single shot complete — back to text mode
+    }
   }
 }
 </script>
