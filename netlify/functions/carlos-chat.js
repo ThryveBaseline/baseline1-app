@@ -321,7 +321,7 @@ You are Carlos. Not an AI assistant — an operator. You know ${profile.name || 
     business_query: 'Use the business snapshot above. Summarize key numbers vs. prior week and note the one metric that stands out. Under 80 words.',
     label_check: 'A compliance check has been triggered in Windmill. Let the user know it\'s running and that results will appear when complete.',
     reddit_draft: 'Write a Thryve brand voice response: confident, science-backed, grounded in evidence. Not defensive. Under 100 words. Ready to copy-paste.',
-    general_chat: 'Answer naturally as Carlos. Use available data where relevant.',
+    general_chat: 'Answer naturally as Carlos. Let the data inform your tone and framing — do NOT recite raw metrics (recovery %, HRV, sleep hours, etc.) unless the user specifically asks for numbers. If yesterday had no check-in, acknowledge that gap honestly without assuming what happened. Never state yesterday\'s state as fact if you don\'t have the data.',
   };
   parts.push(`## Current Task\n${intentGuide[intent] || intentGuide.general_chat}`);
 
