@@ -3519,7 +3519,10 @@ async function carlosSpeak(text) {
       body: JSON.stringify({ text: text.slice(0, 800), voiceId }),
       signal: AbortSignal.timeout(12000), // don't hang if EL is slow/down
     });
-    if (!res.ok) throw new Error('TTS ' + res.status);
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || ('TTS ' + res.status));
+    }
     const { audio } = await res.json();
     if (!audio) throw new Error('No audio data');
 
@@ -3550,9 +3553,12 @@ async function carlosSpeak(text) {
     });
   } catch (err) {
     console.warn('ElevenLabs TTS error:', err.message);
-    // Don't hang — resolve immediately so callers (conversation mode) are never blocked
     CARLOS.isPlaying = false;
     CARLOS.currentSource = null;
+    // Surface API key / permission errors visibly so they're not silently dropped
+    if (err.message && (err.message.includes('401') || err.message.includes('403') || err.message.includes('missing_permissions'))) {
+      toast('Voice error: check ElevenLabs API key permissions', 'warn');
+    }
   }
 }
 

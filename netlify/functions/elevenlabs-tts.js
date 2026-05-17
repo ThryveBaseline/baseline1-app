@@ -47,11 +47,14 @@ exports.handler = async function(event) {
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error('ElevenLabs error:', res.status, errText.slice(0, 300));
+      console.error('ElevenLabs error:', res.status, errText.slice(0, 500));
+      // Parse and surface the specific error so the client can show a useful message
+      let errDetail = `ElevenLabs ${res.status}`;
+      try { const j = JSON.parse(errText); errDetail = j.detail?.message || j.detail?.status || errDetail; } catch {}
       return {
         statusCode: res.status,
         headers: { ...CORS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: `ElevenLabs ${res.status}` }),
+        body: JSON.stringify({ error: errDetail }),
       };
     }
 
