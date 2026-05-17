@@ -592,6 +592,77 @@ body::before { content: ''; position: fixed; inset: 0; background-image: url("da
 .modal-confirm { background: var(--yellow); border: none; color: #0f0a06; padding: 11px; font-family: 'Fraunces', serif; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
 .modal-confirm:hover { background: #e4ff00; }
 
+/* CARLOS CHAT */
+.carlos-header { display: flex; align-items: center; justify-content: space-between; padding: 13px 18px 11px; border-bottom: 1px solid var(--border); background: var(--bg); flex-shrink: 0; position: sticky; top: 0; z-index: 5; }
+.carlos-title { display: flex; align-items: center; gap: 10px; }
+.carlos-av { width: 32px; height: 32px; border-radius: 50%; background: var(--forest-mid); border: 1.5px solid var(--border-green); display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', serif; font-size: 14px; font-weight: 700; color: var(--green-bright); flex-shrink: 0; }
+.carlos-name { font-family: 'Fraunces', serif; font-size: 15px; font-weight: 700; color: var(--cream); }
+.carlos-sub { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--cream-muted); letter-spacing: 0.08em; margin-top: 1px; }
+.carlos-clear-btn { background: none; border: 1px solid var(--border-warm); color: var(--cream-muted); width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+.carlos-clear-btn:hover { border-color: var(--yellow); color: var(--yellow); }
+
+.carlos-messages { flex: 1; overflow-y: auto; padding: 16px 0 8px; display: flex; flex-direction: column; gap: 0; min-height: 0; }
+#s-carlos { display: none; flex-direction: column; height: 100%; padding-bottom: 0; }
+#s-carlos.active { display: flex; }
+
+.carlos-welcome { padding: 20px 18px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.carlos-welcome-av { width: 36px; height: 36px; border-radius: 50%; background: var(--forest-mid); border: 1.5px solid var(--border-green); display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', serif; font-size: 15px; font-weight: 700; color: var(--green-bright); }
+.carlos-welcome-text { font-size: 14px; color: var(--cream-dim); line-height: 1.65; font-weight: 300; }
+.carlos-starters { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 4px; }
+.carlos-starter { background: var(--raised); border: 1px solid var(--border-warm); color: var(--cream-muted); font-size: 12px; font-weight: 300; padding: 7px 12px; cursor: pointer; transition: all 0.15s; text-align: left; }
+.carlos-starter:hover { border-color: var(--green-bright); color: var(--green-bright); }
+
+.cmsg { padding: 10px 18px; animation: fadeIn 0.2s ease; }
+.cmsg-user { display: flex; justify-content: flex-end; }
+.cmsg-user .cmsg-bubble { background: var(--forest); border: 1px solid var(--border-green); color: var(--cream); font-size: 14px; font-weight: 300; line-height: 1.6; padding: 10px 14px; max-width: 85%; }
+.cmsg-carlos { display: flex; align-items: flex-start; gap: 10px; }
+.cmsg-carlos-av { width: 28px; height: 28px; border-radius: 50%; background: var(--forest-mid); border: 1.5px solid var(--border-green); display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', serif; font-size: 11px; font-weight: 700; color: var(--green-bright); flex-shrink: 0; margin-top: 2px; }
+.cmsg-carlos-body { flex: 1; min-width: 0; }
+.cmsg-bubble-carlos { background: var(--surface); border: 1px solid var(--border); color: var(--cream); font-size: 14px; font-weight: 300; line-height: 1.7; padding: 11px 14px; }
+.cmsg-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.cmsg-action-chip { display: flex; align-items: center; gap: 4px; background: var(--raised); border: 1px solid var(--border-warm); padding: 3px 9px; font-family: 'DM Mono', monospace; font-size: 9px; color: var(--cream-muted); letter-spacing: 0.06em; }
+.cmsg-action-chip.ok { border-color: rgba(109,184,127,0.3); color: var(--green-bright); }
+.cmsg-action-chip.fail { border-color: rgba(185,28,28,0.3); color: var(--red); }
+.cmsg-action-chip svg { flex-shrink: 0; }
+.cmsg-copy { background: none; border: none; color: var(--cream-muted); cursor: pointer; font-size: 11px; padding: 3px 6px; transition: color 0.15s; font-family: 'DM Mono', monospace; letter-spacing: 0.05em; }
+.cmsg-copy:hover { color: var(--yellow); }
+.carlos-typing { display: flex; align-items: flex-start; gap: 10px; padding: 10px 18px; }
+.carlos-typing-dots { display: flex; gap: 4px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); }
+.carlos-typing-dots span { width: 5px; height: 5px; border-radius: 50%; background: var(--cream-muted); animation: typingDot 1.2s ease infinite; }
+.carlos-typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.carlos-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typingDot { 0%,60%,100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+.carlos-preview-gate { display: none; margin: 0 18px 10px; background: var(--forest); border: 1px solid var(--border-green); padding: 14px; animation: fadeIn 0.2s ease; }
+.carlos-preview-gate.visible { display: block; }
+.cpg-label { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.14em; color: var(--green-bright); text-transform: uppercase; margin-bottom: 7px; }
+.cpg-text { font-size: 13px; color: var(--cream); font-style: italic; line-height: 1.6; margin-bottom: 12px; font-weight: 300; }
+.cpg-actions { display: flex; gap: 8px; }
+.cpg-use { flex: 1; background: var(--green-bright); color: #0f0a06; border: none; padding: 9px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+.cpg-use:hover { background: #7fcf93; }
+.cpg-regen { background: none; border: 1px solid var(--border-warm); color: var(--cream-muted); padding: 9px 14px; font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+.cpg-regen:hover { border-color: var(--yellow); color: var(--yellow); }
+
+.carlos-composer { border-top: 1px solid var(--border); background: var(--bg); padding: 10px 14px; padding-bottom: max(10px, env(safe-area-inset-bottom)); flex-shrink: 0; }
+.carlos-status-row { display: flex; gap: 6px; margin-bottom: 8px; min-height: 0; transition: min-height 0.2s; }
+.carlos-status-row:empty { margin-bottom: 0; }
+.carlos-status-chip { display: flex; align-items: center; gap: 5px; background: var(--raised); border: 1px solid var(--border-warm); padding: 4px 10px; font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.08em; color: var(--cream-muted); }
+.carlos-status-chip.listening { border-color: rgba(59,130,246,0.4); color: var(--blue); background: var(--blue-dim); }
+.carlos-status-chip.thinking { border-color: rgba(212,240,0,0.3); color: var(--yellow); background: var(--yellow-ghost); }
+.carlos-status-chip.acting { border-color: rgba(109,184,127,0.3); color: var(--green-bright); background: var(--green-dim); }
+.carlos-status-chip-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: blink 1.2s ease infinite; }
+.carlos-input-row { display: flex; align-items: flex-end; gap: 8px; }
+.carlos-input { flex: 1; background: var(--raised); border: 1px solid var(--border-warm); color: var(--cream); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; padding: 10px 12px; outline: none; resize: none; line-height: 1.5; max-height: 120px; overflow-y: auto; transition: border-color 0.2s; -webkit-appearance: none; border-radius: 0; }
+.carlos-input::placeholder { color: var(--cream-muted); }
+.carlos-input:focus { border-color: rgba(212,240,0,0.3); }
+.carlos-mic { width: 38px; height: 38px; background: var(--raised); border: 1px solid var(--border-warm); color: var(--cream-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+.carlos-mic:hover { border-color: var(--blue); color: var(--blue); }
+.carlos-mic.listening { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); animation: pulse 1s ease infinite; }
+.carlos-send { width: 38px; height: 38px; background: var(--yellow); border: none; color: #0f0a06; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+.carlos-send:hover { background: #e4ff00; }
+.carlos-send:disabled { background: var(--elevated); color: var(--cream-muted); cursor: not-allowed; }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.4); } 50% { box-shadow: 0 0 0 6px rgba(59,130,246,0); } }
+
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
@@ -1183,13 +1254,59 @@ select, input, textarea, button { font-family: inherit; }
       <div style="height:16px;"></div>
     </div>
 
+    <!-- CARLOS -->
+    <div class="screen" id="s-carlos">
+      <div class="carlos-header">
+        <div class="carlos-title">
+          <span class="carlos-av">C</span>
+          <div>
+            <div class="carlos-name">Carlos</div>
+            <div class="carlos-sub" id="carlosStatus">Ready</div>
+          </div>
+        </div>
+        <button class="carlos-clear-btn" onclick="carlosClearThread()" title="New thread">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+        </button>
+      </div>
+
+      <div class="carlos-messages" id="carlosMessages">
+        <div class="carlos-welcome">
+          <div class="carlos-welcome-av">C</div>
+          <div class="carlos-welcome-text">Morning. Ask me anything — recovery, food log, business numbers, or what needs attention today.</div>
+          <div class="carlos-starters" id="carlosStarters"></div>
+        </div>
+      </div>
+
+      <div class="carlos-preview-gate" id="carlosPreviewGate">
+        <div class="cpg-label">Speaking preview</div>
+        <div class="cpg-text" id="cpgText"></div>
+        <div class="cpg-actions">
+          <button class="cpg-use" onclick="carlosAcceptPreview()">Use this response</button>
+          <button class="cpg-regen" onclick="carlosRegenTone()">Regenerate tone</button>
+        </div>
+      </div>
+
+      <div class="carlos-composer" id="carlosComposer">
+        <div class="carlos-status-row" id="carlosStatusRow"></div>
+        <div class="carlos-input-row">
+          <textarea class="carlos-input" id="carlosInput" placeholder="Ask Carlos anything…" rows="1" onkeydown="carlosInputKeydown(event)" oninput="carlosInputResize(this)"></textarea>
+          <button class="carlos-mic" id="carlosMic" onclick="carlosToggleMic()" title="Voice input">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+          <button class="carlos-send" id="carlosSend" onclick="carlosSend()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <div class="bnav">
     <button class="nb active" id="nb-home" onclick="nav('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><div class="nb-lbl">Home</div></button>
     <button class="nb" id="nb-analyze" onclick="nav('analyze')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><div class="nb-lbl">Analyze</div></button>
+    <button class="nb" id="nb-carlos" onclick="nav('carlos')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><div class="nb-lbl">Carlos</div></button>
     <button class="nb" id="nb-log" onclick="nav('log')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M12 6v6l4 2"/></svg><div class="nb-lbl">Log</div></button>
-    <button class="nb" id="nb-stack" onclick="nav('stack')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg><div class="nb-lbl">Stack</div></button>
     <button class="nb" id="nb-profile" onclick="nav('profile')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><div class="nb-lbl">Profile</div></button>
   </div>
 </div>
@@ -1531,6 +1648,7 @@ function nav(screen) {
   if (screen === 'log') refreshLog();
   if (screen === 'stack') refreshStack();
   if (screen === 'profile') refreshProfile();
+  if (screen === 'carlos' && !CARLOS.threadId) carlosInit();
 }
 
 // ══════════════════════════════════════
@@ -3140,6 +3258,346 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 }
-</script>
+
+// ══════════════════════════════════════
+// CARLOS CHAT
+// ══════════════════════════════════════
+
+const CARLOS = {
+  thread: [],           // {role, content, actions, intent}
+  threadId: null,
+  isFirstMessage: true,
+  isBusy: false,
+  recognition: null,
+  isListening: false,
+  pendingReply: null,   // awaiting voice preview acceptance
+  pendingMsgEl: null,
+  speechSupported: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+  synthSupported: !!window.speechSynthesis,
+};
+
+const CARLOS_STARTERS = [
+  'How is my recovery trending this week?',
+  'Just had a protein shake and eggs',
+  'How did Thryve do this week?',
+  'What needs attention today?',
+  'Draft a response to the organic salt thread',
+];
+
+function carlosInit() {
+  CARLOS.thread = [];
+  CARLOS.threadId = 'th_' + Date.now();
+  CARLOS.isFirstMessage = true;
+  CARLOS.pendingReply = null;
+  CARLOS.pendingMsgEl = null;
+
+  const msgs = document.getElementById('carlosMessages');
+  msgs.innerHTML = `
+    <div class="carlos-welcome">
+      <div class="carlos-welcome-av">C</div>
+      <div class="carlos-welcome-text">Morning. Ask me anything — recovery, food log, business numbers, or what needs attention today.</div>
+      <div class="carlos-starters" id="carlosStarters"></div>
+    </div>`;
+
+  const starters = document.getElementById('carlosStarters');
+  starters.innerHTML = CARLOS_STARTERS.map(s =>
+    `<button class="carlos-starter" onclick="carlosUseStarter(this.textContent)">${s}</button>`
+  ).join('');
+
+  document.getElementById('carlosPreviewGate').classList.remove('visible');
+  document.getElementById('carlosStatusRow').innerHTML = '';
+  carlosSetStatus('Ready');
+  document.getElementById('carlosInput').value = '';
+  carlosInputResize(document.getElementById('carlosInput'));
+}
+
+function carlosClearThread() { carlosInit(); }
+
+function carlosUseStarter(text) {
+  document.getElementById('carlosInput').value = text;
+  carlosInputResize(document.getElementById('carlosInput'));
+  document.getElementById('carlosInput').focus();
+}
+
+function carlosSetStatus(text) {
+  document.getElementById('carlosStatus').textContent = text;
+}
+
+function carlosShowChip(label, cls) {
+  const row = document.getElementById('carlosStatusRow');
+  row.innerHTML = `<div class="carlos-status-chip ${cls}"><div class="carlos-status-chip-dot"></div>${label}</div>`;
+}
+
+function carlosClearChip() {
+  document.getElementById('carlosStatusRow').innerHTML = '';
+}
+
+function carlosInputKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); carlosSend(); }
+}
+
+function carlosInputResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function carlosScrollBottom() {
+  const el = document.getElementById('carlosMessages');
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Render a message bubble ───────────────────────────────────────────────────
+
+function carlosRenderUser(text) {
+  const el = document.createElement('div');
+  el.className = 'cmsg cmsg-user';
+  el.innerHTML = `<div class="cmsg-bubble">${escHtml(text)}</div>`;
+  document.getElementById('carlosMessages').appendChild(el);
+  carlosScrollBottom();
+}
+
+function carlosRenderTyping() {
+  const el = document.createElement('div');
+  el.className = 'carlos-typing';
+  el.id = 'carlosTyping';
+  el.innerHTML = `<div class="cmsg-carlos-av">C</div><div class="carlos-typing-dots"><span></span><span></span><span></span></div>`;
+  document.getElementById('carlosMessages').appendChild(el);
+  carlosScrollBottom();
+  return el;
+}
+
+function carlosRemoveTyping() {
+  const el = document.getElementById('carlosTyping');
+  if (el) el.remove();
+}
+
+function carlosRenderCarlos(text, actions, intent) {
+  const el = document.createElement('div');
+  el.className = 'cmsg cmsg-carlos';
+
+  const actionChips = (actions || []).map(a => {
+    const ok = a.status === 'completed' || a.status === 'triggered';
+    const label = {
+      food_log: 'food logged',
+      agent_feedback: 'feedback sent',
+      label_check: 'compliance running',
+      health_query: 'whoop data',
+      business_query: 'weekly snapshot',
+    }[a.type] || a.type;
+    const icon = ok
+      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="9" height="9"><polyline points="20 6 9 17 4 12"/></svg>`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="9" height="9"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+    return `<div class="cmsg-action-chip ${ok ? 'ok' : 'fail'}">${icon} ${label}</div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="cmsg-carlos-av">C</div>
+    <div class="cmsg-carlos-body">
+      <div class="cmsg-bubble-carlos">${escHtml(text)}</div>
+      <div class="cmsg-actions">
+        ${actionChips}
+        <button class="cmsg-copy" onclick="carlosCopyMsg(this)" data-text="${escAttr(text)}">copy</button>
+      </div>
+    </div>`;
+  document.getElementById('carlosMessages').appendChild(el);
+  carlosScrollBottom();
+  return el;
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
+function escAttr(s) { return String(s).replace(/"/g,'&quot;'); }
+
+function carlosCopyMsg(btn) {
+  const text = btn.dataset.text;
+  navigator.clipboard?.writeText(text).then(() => { btn.textContent = 'copied'; setTimeout(() => { btn.textContent = 'copy'; }, 1500); }).catch(() => {});
+}
+
+// ── Voice preview gate ────────────────────────────────────────────────────────
+
+function carlosShowPreview(preview, fullReply, actions, intent) {
+  CARLOS.pendingReply = { fullReply, actions, intent };
+  document.getElementById('cpgText').textContent = preview;
+  document.getElementById('carlosPreviewGate').classList.add('visible');
+  carlosScrollBottom();
+  carlosSpeak(preview);
+}
+
+function carlosAcceptPreview() {
+  document.getElementById('carlosPreviewGate').classList.remove('visible');
+  window.speechSynthesis?.cancel();
+  if (!CARLOS.pendingReply) return;
+  const { fullReply, actions, intent } = CARLOS.pendingReply;
+  CARLOS.pendingReply = null;
+  carlosRenderCarlos(fullReply, actions, intent);
+  CARLOS.thread.push({ role: 'assistant', content: fullReply });
+}
+
+function carlosRegenTone() {
+  window.speechSynthesis?.cancel();
+  document.getElementById('carlosPreviewGate').classList.remove('visible');
+  if (!CARLOS.pendingReply) return;
+  const { fullReply, actions, intent } = CARLOS.pendingReply;
+  CARLOS.pendingReply = null;
+  // Re-send with tone instruction
+  const input = document.getElementById('carlosInput');
+  const orig = CARLOS.thread.length > 0 ? CARLOS.thread[CARLOS.thread.length - 1]?.content : '';
+  carlosSendRaw((orig || 'previous message') + ' [respond more conversationally]');
+}
+
+// ── Speech synthesis ──────────────────────────────────────────────────────────
+
+function carlosSpeak(text) {
+  if (!CARLOS.synthSupported) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.rate = 1.0;
+  utt.pitch = 0.95;
+  utt.volume = 1;
+  window.speechSynthesis.speak(utt);
+}
+
+// ── Speech recognition ────────────────────────────────────────────────────────
+
+function carlosToggleMic() {
+  if (!CARLOS.speechSupported) { toast('Voice input not supported in this browser', 'warn'); return; }
+  if (CARLOS.isListening) { carlosStopMic(); } else { carlosStartMic(); }
+}
+
+function carlosStartMic() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new SpeechRecognition();
+  rec.lang = 'en-US';
+  rec.interimResults = true;
+  rec.continuous = false;
+  CARLOS.recognition = rec;
+  CARLOS.isListening = true;
+
+  const mic = document.getElementById('carlosMic');
+  mic.classList.add('listening');
+  carlosShowChip('Listening', 'listening');
+  carlosSetStatus('Listening…');
+
+  const input = document.getElementById('carlosInput');
+  let finalTranscript = '';
+
+  rec.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    input.value = finalTranscript + interim;
+    carlosInputResize(input);
+  };
+
+  rec.onend = () => {
+    CARLOS.isListening = false;
+    mic.classList.remove('listening');
+    carlosClearChip();
+    carlosSetStatus('Ready');
+    if (finalTranscript.trim()) {
+      input.value = finalTranscript.trim();
+      carlosInputResize(input);
+    }
+  };
+
+  rec.onerror = () => { CARLOS.isListening = false; mic.classList.remove('listening'); carlosClearChip(); carlosSetStatus('Ready'); };
+  rec.start();
+}
+
+function carlosStopMic() {
+  CARLOS.recognition?.stop();
+  CARLOS.isListening = false;
+  document.getElementById('carlosMic').classList.remove('listening');
+  carlosClearChip();
+  carlosSetStatus('Ready');
+}
+
+// ── Send message ──────────────────────────────────────────────────────────────
+
+async function carlosSend() {
+  const input = document.getElementById('carlosInput');
+  const text = input.value.trim();
+  if (!text || CARLOS.isBusy) return;
+  input.value = '';
+  carlosInputResize(input);
+  carlosSendRaw(text);
+}
+
+async function carlosSendRaw(text) {
+  if (CARLOS.isBusy) return;
+  CARLOS.isBusy = true;
+  document.getElementById('carlosSend').disabled = true;
+
+  // Remove welcome screen on first message
+  const welcome = document.querySelector('.carlos-welcome');
+  if (welcome) welcome.remove();
+
+  carlosRenderUser(text);
+  CARLOS.thread.push({ role: 'user', content: text });
+
+  carlosShowChip('Thinking', 'thinking');
+  carlosSetStatus('Thinking…');
+  const typingEl = carlosRenderTyping();
+
+  try {
+    const p = getP();
+    const profile = {
+      name: p.name, goal: p.goal, activity: p.activity,
+      glp1: p.glp1, conditions: p.conditions, weight: p.weight,
+      briefTone: p.briefTone,
+    };
+
+    // Build conversation history for context (last 10 messages, exclude latest user msg)
+    const history = CARLOS.thread.slice(0, -1).slice(-10).map(m => ({ role: m.role, content: m.content }));
+
+    const res = await fetch('/api/carlos-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: 'primary',
+        threadId: CARLOS.threadId,
+        message: text,
+        profile,
+        conversationHistory: history,
+        isFirstMessage: CARLOS.isFirstMessage,
+        brandContext: 'Thryve',
+      }),
+    });
+
+    CARLOS.isFirstMessage = false;
+    carlosRemoveTyping();
+    carlosClearChip();
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const { reply, spokenPreview, actions, intent } = data;
+
+    // Show voice preview gate if speech is available
+    if (CARLOS.synthSupported && spokenPreview) {
+      carlosSetStatus('Speaking preview…');
+      carlosShowPreview(spokenPreview, reply, actions, intent);
+    } else {
+      carlosRenderCarlos(reply, actions, intent);
+      CARLOS.thread.push({ role: 'assistant', content: reply });
+    }
+
+    carlosSetStatus('Ready');
+  } catch (err) {
+    carlosRemoveTyping();
+    carlosClearChip();
+    carlosSetStatus('Ready');
+    carlosRenderCarlos('Something went wrong — ' + (err.message || 'please try again.'), [], 'error');
+    CARLOS.thread.push({ role: 'assistant', content: 'Error: ' + err.message });
+  } finally {
+    CARLOS.isBusy = false;
+    document.getElementById('carlosSend').disabled = false;
+  }
+}
+
 </body>
 </html>
