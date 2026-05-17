@@ -90,7 +90,6 @@ Set in Netlify dashboard → Site → Environment Variables.
 ## Pending Work
 - Whoop developer credentials — create app at developer.whoop.com, get CLIENT_ID + CLIENT_SECRET
 - `business_weekly_snapshots` table empty — seed with real Thryve weekly numbers for business_query intent
-- Netlify AI Gateway — configure to route all Claude API calls through gateway for logging
 
 ## Session Notes — Automatic (No Exceptions)
 
