@@ -3517,17 +3517,16 @@ async function carlosSpeak(text) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: text.slice(0, 800), voiceId }),
+      signal: AbortSignal.timeout(12000), // don't hang if EL is slow/down
     });
     if (!res.ok) throw new Error('TTS ' + res.status);
     const { audio } = await res.json();
     if (!audio) throw new Error('No audio data');
 
-    // Decode base64 → ArrayBuffer
     const binary = atob(audio);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
-    // Use AudioContext — unlocked on user gesture, plays reliably without autoplay restrictions
     const ctx = getAudioCtx();
     const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
 
@@ -3537,23 +3536,23 @@ async function carlosSpeak(text) {
       source.connect(ctx.destination);
       CARLOS.currentSource = source;
       CARLOS.isPlaying = true;
-      source.onended = () => {
+      const done = () => {
         CARLOS.isPlaying = false;
         if (CARLOS.currentSource === source) CARLOS.currentSource = null;
         resolve();
       };
+      source.onended = done;
+      // Safety: resolve after duration + 2s even if onended doesn't fire
+      const safetyMs = Math.ceil(audioBuffer.duration * 1000) + 2000;
+      const safety = setTimeout(done, safetyMs);
+      source.onended = () => { clearTimeout(safety); done(); };
       source.start(0);
     });
   } catch (err) {
     console.warn('ElevenLabs TTS error:', err.message);
-    // Fallback to browser speech synthesis
-    if (!CARLOS.synthSupported) return;
-    return new Promise((resolve) => {
-      const utt = new SpeechSynthesisUtterance(text.slice(0, 300));
-      utt.rate = 1.0; utt.pitch = 0.95;
-      utt.onend = resolve; utt.onerror = resolve;
-      window.speechSynthesis.speak(utt);
-    });
+    // Don't hang — resolve immediately so callers (conversation mode) are never blocked
+    CARLOS.isPlaying = false;
+    CARLOS.currentSource = null;
   }
 }
 
@@ -3734,21 +3733,18 @@ async function carlosSendRaw(text) {
     const data = await res.json();
     const { reply, spokenPreview, actions, intent } = data;
 
+    carlosRenderCarlos(reply, actions, intent);
+    CARLOS.thread.push({ role: 'assistant', content: reply });
+
     if (CARLOS.conversationMode) {
-      // Conversation mode: render text immediately, play full ElevenLabs audio, restart mic after
-      carlosRenderCarlos(reply, actions, intent);
-      CARLOS.thread.push({ role: 'assistant', content: reply });
+      // Conversation mode: await full audio, then restart mic
       carlosSetStatus('Speaking…');
       carlosShowChip('Speaking', 'thinking');
       await carlosSpeak(reply);
       carlosClearChip();
     } else if (spokenPreview) {
-      // Text mode with voice preview gate
-      carlosSetStatus('Speaking preview…');
-      carlosShowPreview(spokenPreview, reply, actions, intent);
-    } else {
-      carlosRenderCarlos(reply, actions, intent);
-      CARLOS.thread.push({ role: 'assistant', content: reply });
+      // Text mode: response already rendered, play preview audio in background
+      carlosSpeak(spokenPreview);
     }
 
     carlosSetStatus('Ready');
