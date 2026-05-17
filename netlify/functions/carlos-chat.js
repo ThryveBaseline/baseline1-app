@@ -65,18 +65,27 @@ async function fetchBusinessContext(brand) {
   } catch { return null; }
 }
 
-async function fetchPersona() {
+async function fetchPersonaFull() {
   try {
-    const res = await fetch(`${RAG_BASE_URL}/query`, {
+    const ragQuery = (q, k) => fetch(`${RAG_BASE_URL}/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: 'Carlos persona morning brief operator stance', top_k: 4, collection: 'baseline_persona' }),
-      signal: AbortSignal.timeout(4000),
+      body: JSON.stringify({ query: q, top_k: k, collection: 'baseline_persona' }),
+      signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text = data.answer || (Array.isArray(data.results) ? data.results.map(r => r.content || r.text || '').join('\n') : '');
-    return text.trim() || null;
+
+    const [voiceRes, behaviorRes] = await Promise.all([
+      ragQuery('Carlos voice rules tone sounds like a person not an AI communication style', 6),
+      ragQuery('severity ladder urgency founder story behavioral principles operator stance self-check', 5),
+    ]);
+
+    const extract = async (res) => {
+      if (!res.ok) return '';
+      const d = await res.json();
+      return d.answer || (Array.isArray(d.results) ? d.results.map(r => r.content || r.text || '').join('\n') : '');
+    };
+    const [voice, behavior] = await Promise.all([extract(voiceRes), extract(behaviorRes)]);
+    return [voice, behavior].filter(Boolean).join('\n\n').trim() || null;
   } catch { return null; }
 }
 
@@ -174,16 +183,19 @@ function buildSystemPrompt({ profile, health, business, persona, agentOutputs, m
   parts.push(persona
     ? `## Carlos — Persona\n${persona}`
     : `## Carlos — Persona
-You are Carlos, a personal AI for ${profile.name || 'the user'}. You are warm, candid, and concise — not robotic, not deferential. You give direct answers grounded in real data. When you have numbers, you use them. When you don't, you say so.`);
+You are Carlos. Not an AI assistant — an operator. You know ${profile.name || 'the user'}'s business, body, and patterns. You are direct, candid, and specific. You use real numbers. You don't motivate, hedge, or explain things the user already knows. You give the finding first, the context second, the action third — only if needed.`);
 
-  parts.push(`## Operator Rules
-- Answer with specific numbers and timeframes when data is available.
-- Never use vague motivational language ("You're doing great!", "Keep it up!").
-- When a message implies logging data, confirm the action naturally in the reply.
-- Mention the data source in plain English when it adds context (e.g. "your Whoop from this morning").
-- Keep replies under 100 words unless the user asks for a detailed breakdown.
-- Never start a response with "Great question", "Of course", "Certainly", or "Absolutely".
-- Tone: direct. Like a trusted coach who respects your time.`);
+  parts.push(`## Operator Rules — MANDATORY
+- Before sending any response, ask: "Would Carlos say this, or would a wellness app say this?" If a wellness app would say it — rewrite it.
+- Answer with specific numbers and timeframes when data is available. Never use adjectives where numbers exist.
+- NEVER say: "Great question", "Certainly", "Of course", "Absolutely", "You're doing great!", "Keep it up!", "Let me know if you need anything else", "It's important to...", or any sentence that could appear in a generic push notification.
+- NEVER start a response with "I".
+- When logging data, confirm it in one natural sentence — no fanfare.
+- Mention the data source inline when it adds context ("your Whoop from this morning", "last week's Thryve snapshot").
+- Keep replies under 80 words unless the user asks for a breakdown. End when you've answered. No padding.
+- Sound like a person who knows this specific person's business and body — not a wellness chatbot.
+- Numbers beat adjectives. "Recovery was 72%, up from 61% 7-day avg" beats "Recovery was good."
+- One action per response when action is needed. Not three.`);
 
   // Profile
   const profileLines = [
@@ -248,7 +260,7 @@ You are Carlos, a personal AI for ${profile.name || 'the user'}. You are warm, c
   };
   parts.push(`## Current Task\n${intentGuide[intent] || intentGuide.general_chat}`);
 
-  parts.push('If the user message implies logging or correcting data, the action was already performed — reference it naturally.\nIf asked about health or business, use the numbers above. Never invent data.\nYou are Carlos: warm, direct, and grounded.');
+  parts.push('If the user message implies logging or correcting data, the action was already performed — reference it in one natural sentence.\nIf asked about health or business, use the numbers above. Never invent data. Never say "I don\'t have data on that" — say what you do have and what you don\'t.\nFinal check: would a wellness app send this response? If yes, rewrite it.');
 
   return parts.join('\n\n');
 }
@@ -301,7 +313,7 @@ exports.handler = async function(event) {
     const [health, business, persona, agentOutputs, morningBrief] = await Promise.all([
       needsHealth ? fetchHealthContext() : Promise.resolve(null),
       needsBusiness ? fetchBusinessContext(brandContext) : Promise.resolve(null),
-      isFirstMessage ? fetchPersona() : Promise.resolve(null),
+      fetchPersonaFull(),
       needsOutputs ? fetchRecentAgentOutputs() : Promise.resolve([]),
       needsOutputs ? fetchRecentMorningBrief() : Promise.resolve(null),
     ]);

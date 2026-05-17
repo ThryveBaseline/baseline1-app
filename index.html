@@ -3271,7 +3271,7 @@ const CARLOS = {
   isListening: false,
   pendingReply: null,   // awaiting voice preview acceptance
   pendingMsgEl: null,
-  speechSupported: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+  speechSupported: !!(window.SpeechRecognition || window.webkitSpeechRecognition) && (location.protocol === 'https:' || location.hostname === 'localhost'),
   synthSupported: !!window.speechSynthesis,
 };
 
@@ -3464,10 +3464,14 @@ function carlosToggleMic() {
 
 function carlosStartMic() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { toast('Voice input not supported in this browser', 'warn'); return; }
+
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const rec = new SpeechRecognition();
   rec.lang = 'en-US';
-  rec.interimResults = true;
+  rec.interimResults = !isIOS; // iOS only fires final results; interim causes double-entry
   rec.continuous = false;
+  rec.maxAlternatives = 1;
   CARLOS.recognition = rec;
   CARLOS.isListening = true;
 
@@ -3497,11 +3501,35 @@ function carlosStartMic() {
     if (finalTranscript.trim()) {
       input.value = finalTranscript.trim();
       carlosInputResize(input);
+      // On iOS, auto-send because there's no interim feedback to confirm
+      if (isIOS) setTimeout(() => carlosSend(), 100);
     }
   };
 
-  rec.onerror = () => { CARLOS.isListening = false; mic.classList.remove('listening'); carlosClearChip(); carlosSetStatus('Ready'); };
-  rec.start();
+  rec.onerror = (e) => {
+    CARLOS.isListening = false;
+    mic.classList.remove('listening');
+    carlosClearChip();
+    carlosSetStatus('Ready');
+    if (e.error === 'aborted') return;
+    const errMsgs = {
+      'not-allowed': 'Microphone access denied — enable it in your browser settings',
+      'no-speech': 'No speech detected — try again',
+      'audio-capture': 'No microphone found on this device',
+      'network': 'Network error — speech recognition requires internet',
+    };
+    toast(errMsgs[e.error] || ('Voice error: ' + e.error), 'warn');
+  };
+
+  try {
+    rec.start();
+  } catch (err) {
+    CARLOS.isListening = false;
+    mic.classList.remove('listening');
+    carlosClearChip();
+    carlosSetStatus('Ready');
+    toast('Could not start microphone — ' + err.message, 'warn');
+  }
 }
 
 function carlosStopMic() {
