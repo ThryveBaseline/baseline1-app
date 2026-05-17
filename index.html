@@ -3304,6 +3304,15 @@ if ('serviceWorker' in navigator) {
 // CARLOS CHAT
 // ══════════════════════════════════════
 
+// AudioContext — unlocked on first user gesture, stays unlocked for async playback
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+function unlockAudio() { try { getAudioCtx(); } catch {} }
+
 const CARLOS = {
   thread: [],           // {role, content, actions, intent}
   threadId: null,
@@ -3317,7 +3326,7 @@ const CARLOS = {
   synthSupported: !!window.speechSynthesis,
   conversationMode: false,
   isPlaying: false,
-  currentAudio: null,
+  currentSource: null,  // AudioContext BufferSourceNode
 };
 
 const CARLOS_STARTERS = [
@@ -3491,7 +3500,10 @@ function carlosRegenTone() {
 // ── Speech synthesis (ElevenLabs + browser fallback) ─────────────────────────
 
 function carlosStopAudio() {
-  if (CARLOS.currentAudio) { CARLOS.currentAudio.pause(); CARLOS.currentAudio = null; }
+  if (CARLOS.currentSource) {
+    try { CARLOS.currentSource.stop(); } catch {}
+    CARLOS.currentSource = null;
+  }
   CARLOS.isPlaying = false;
   window.speechSynthesis?.cancel();
 }
@@ -3508,27 +3520,32 @@ async function carlosSpeak(text) {
     });
     if (!res.ok) throw new Error('TTS ' + res.status);
     const { audio } = await res.json();
-    if (!audio) throw new Error('No audio');
+    if (!audio) throw new Error('No audio data');
+
+    // Decode base64 → ArrayBuffer
     const binary = atob(audio);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const blob = new Blob([bytes], { type: 'audio/mpeg' });
-    const url = URL.createObjectURL(blob);
+
+    // Use AudioContext — unlocked on user gesture, plays reliably without autoplay restrictions
+    const ctx = getAudioCtx();
+    const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
+
     return new Promise((resolve) => {
-      const audioEl = new Audio(url);
-      CARLOS.currentAudio = audioEl;
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      CARLOS.currentSource = source;
       CARLOS.isPlaying = true;
-      const cleanup = () => {
-        URL.revokeObjectURL(url);
+      source.onended = () => {
         CARLOS.isPlaying = false;
-        if (CARLOS.currentAudio === audioEl) CARLOS.currentAudio = null;
+        if (CARLOS.currentSource === source) CARLOS.currentSource = null;
         resolve();
       };
-      audioEl.onended = cleanup;
-      audioEl.onerror = cleanup;
-      audioEl.play().catch(cleanup);
+      source.start(0);
     });
-  } catch {
+  } catch (err) {
+    console.warn('ElevenLabs TTS error:', err.message);
     // Fallback to browser speech synthesis
     if (!CARLOS.synthSupported) return;
     return new Promise((resolve) => {
@@ -3548,6 +3565,7 @@ function carlosToggleMic() {
 }
 
 function carlosEnterConversation() {
+  unlockAudio(); // unlock AudioContext on this user gesture before async playback
   CARLOS.conversationMode = true;
   document.getElementById('carlosMic').classList.add('conversation-mode');
   toast('Conversation mode — speak anytime. Tap mic to stop.', 'info');
@@ -3654,6 +3672,7 @@ function carlosStopMic() {
 // ── Send message ──────────────────────────────────────────────────────────────
 
 async function carlosSend() {
+  unlockAudio(); // unlock AudioContext on send gesture so async EL playback works
   const input = document.getElementById('carlosInput');
   const text = input.value.trim();
   if (!text || CARLOS.isBusy) return;
