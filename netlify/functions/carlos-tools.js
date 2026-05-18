@@ -122,7 +122,7 @@ exports.handler = async function(event) {
 
   try {
     const body = JSON.parse(event.body || '{}');
-    const toolName = body.tool_name || body.name;
+    const toolName = event.queryStringParameters?.tool || body.tool_name || body.name;
 
     let result;
     switch (toolName) {
