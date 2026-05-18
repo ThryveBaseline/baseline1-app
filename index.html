@@ -625,6 +625,9 @@ body::before { content: ''; position: fixed; inset: 0; background-image: url("da
 .cmsg-action-chip svg { flex-shrink: 0; }
 .cmsg-copy { background: none; border: none; color: var(--cream-muted); cursor: pointer; font-size: 11px; padding: 3px 6px; transition: color 0.15s; font-family: 'DM Mono', monospace; letter-spacing: 0.05em; }
 .cmsg-copy:hover { color: var(--yellow); }
+.cmsg-rate { background: none; border: none; cursor: pointer; font-size: 13px; padding: 2px 4px; opacity: 0.35; filter: grayscale(1); transition: opacity 0.15s, filter 0.15s; }
+.cmsg-rate:hover:not(:disabled) { opacity: 0.8; filter: grayscale(0); }
+.cmsg-rate:disabled { cursor: default; }
 .carlos-typing { display: flex; align-items: flex-start; gap: 10px; padding: 10px 18px; }
 .carlos-typing-dots { display: flex; gap: 4px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); }
 .carlos-typing-dots span { width: 5px; height: 5px; border-radius: 50%; background: var(--cream-muted); animation: typingDot 1.2s ease infinite; }
@@ -3621,9 +3624,10 @@ function carlosRemoveTyping() {
   if (el) el.remove();
 }
 
-function carlosRenderCarlos(text, actions, intent) {
+function carlosRenderCarlos(text, actions, intent, logId) {
   const el = document.createElement('div');
   el.className = 'cmsg cmsg-carlos';
+  if (logId) el.dataset.logId = logId;
 
   const actionChips = (actions || []).map(a => {
     const ok = a.status === 'completed' || a.status === 'triggered';
@@ -3640,6 +3644,10 @@ function carlosRenderCarlos(text, actions, intent) {
     return `<div class="cmsg-action-chip ${ok ? 'ok' : 'fail'}">${icon} ${label}</div>`;
   }).join('');
 
+  const ratingBtns = logId ? `
+    <button class="cmsg-rate cmsg-rate-up" title="Good response" onclick="carlosRate(this,1)">\u{1F44D}</button>
+    <button class="cmsg-rate cmsg-rate-dn" title="Bad response" onclick="carlosRate(this,-1)">\u{1F44E}</button>` : '';
+
   el.innerHTML = `
     <div class="cmsg-carlos-av">C</div>
     <div class="cmsg-carlos-body">
@@ -3647,11 +3655,29 @@ function carlosRenderCarlos(text, actions, intent) {
       <div class="cmsg-actions">
         ${actionChips}
         <button class="cmsg-copy" onclick="carlosCopyMsg(this)" data-text="${escAttr(text)}">copy</button>
+        ${ratingBtns}
       </div>
     </div>`;
   document.getElementById('carlosMessages').appendChild(el);
   carlosScrollBottom();
   return el;
+}
+
+async function carlosRate(btn, rating) {
+  const msgEl = btn.closest('[data-log-id]');
+  const logId = msgEl?.dataset?.logId;
+  if (!logId) return;
+  btn.disabled = true;
+  btn.closest('.cmsg-actions').querySelectorAll('.cmsg-rate').forEach(b => b.disabled = true);
+  try {
+    await fetch('/api/carlos-router', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'rate', logId, rating }),
+    });
+    btn.style.opacity = '1';
+    btn.style.filter = 'grayscale(0)';
+  } catch {}
 }
 
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
@@ -4161,9 +4187,9 @@ async function carlosSendRaw(text, fromVoice = false) {
     }
 
     const data = await res.json();
-    const { reply, spokenPreview, actions, intent } = data;
+    const { reply, spokenPreview, actions, intent, logId } = data;
 
-    carlosRenderCarlos(reply, actions, intent);
+    carlosRenderCarlos(reply, actions, intent, logId);
     CARLOS.thread.push({ role: 'assistant', content: reply });
 
     // Voice input → voice response. Text input → text only (no audio).
