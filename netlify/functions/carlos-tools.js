@@ -126,6 +126,7 @@ exports.handler = async function(event) {
 
     let result;
     switch (toolName) {
+      case 'get_user_health_data':
       case 'get_health_data':
         result = await getHealthData();
         break;
