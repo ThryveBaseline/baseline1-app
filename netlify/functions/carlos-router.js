@@ -27,6 +27,23 @@ const COST_WARN_THRESHOLD = 0.50;
 const VALID_INTENTS = ['STRATEGY', 'ANALYSIS', 'CONTENT', 'RESEARCH', 'DOCUMENT', 'HEALTH', 'MEMORY', 'BUSINESS', 'CODE', 'AGENT', 'COLLABORATION'];
 const SESSION_TYPES = ['same_task', 'new_task', 'correction', 'interruption', 'clarification', 'approval', 'rejection'];
 
+// ── Shadow mode config (Section 3) ───────────────────────────────────────────
+const SHADOW_MODE = {
+  enabled: process.env.SHADOW_MODE_ENABLED === 'true',
+  categories: (process.env.SHADOW_MODE_CATEGORIES || 'STRATEGY,ANALYSIS,CONTENT').split(','),
+};
+
+// ── Permission levels (Section 6) ────────────────────────────────────────────
+const PERMISSION_LEVELS = {
+  CHRIS_ONLY:     ['core_philosophy', 'routing_logic', 'strategic_priorities', 'constitution', 'financial_data'],
+  FAMILY_SHARED:  ['family_memory', 'ellington_estates', 'family_health_summary'],
+  INDIVIDUAL:     ['personal_health', 'personal_memory', 'personal_preferences', 'conversation_history'],
+  AUTOMATED:      ['system_logs', 'routing_log', 'performance_metrics'],
+};
+
+// Known family members — extend via env var FAMILY_USER_IDS="jade,..."
+const FAMILY_USER_IDS = new Set(['primary', 'chris', ...(process.env.FAMILY_USER_IDS || '').split(',').filter(Boolean)]);
+
 // ── Constitution cache ────────────────────────────────────────────────────────
 let _constitutionCache = null;
 let _constitutionCacheTime = 0;
@@ -77,6 +94,61 @@ async function supaPatch(path, data) {
     });
     return res.ok ? res.json() : null;
   } catch { return null; }
+}
+
+// ── PII strip (Section 3) — runs BEFORE any training data write ──────────────
+const PII_PATTERNS = [
+  /\b[A-Z][a-z]{1,20}\s[A-Z][a-z]{1,20}\b/g,
+  /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g,
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
+  /\b\d{1,5}\s[A-Za-z\s]{5,30}(?:St|Ave|Rd|Blvd|Dr|Ln|Way|Court|Pl)\b/gi,
+  /\b\d{5}(?:-\d{4})?\b/g,
+  /\b(?:hrv|rhr|recovery|strain)\s*[:=]?\s*\d+\.?\d*\b/gi,
+  /\$\s*\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b/g,
+];
+
+function stripPII(text) {
+  if (!text) return { clean: '', stripped: false };
+  let clean = text;
+  let stripped = false;
+  for (const p of PII_PATTERNS) {
+    const before = clean;
+    clean = clean.replace(p, '[REDACTED]');
+    if (clean !== before) stripped = true;
+    p.lastIndex = 0;
+  }
+  return { clean, stripped };
+}
+
+// ── Permission check (Section 6) ─────────────────────────────────────────────
+function checkPermission(userId, dataType) {
+  const isChris = userId === 'primary' || userId === 'chris';
+  const isFamilyMember = FAMILY_USER_IDS.has(userId);
+  const isAutomated = userId === 'system' || userId === 'automated';
+
+  if (PERMISSION_LEVELS.CHRIS_ONLY.includes(dataType)) return isChris;
+  if (PERMISSION_LEVELS.FAMILY_SHARED.includes(dataType)) return isFamilyMember;
+  if (PERMISSION_LEVELS.INDIVIDUAL.includes(dataType)) {
+    // Individual data: only the owning user, not even other family members
+    return userId === 'primary' || userId === 'chris';
+  }
+  if (PERMISSION_LEVELS.AUTOMATED.includes(dataType)) return isAutomated || isChris;
+  return isChris; // default deny
+}
+
+function enforcePermissions(userId, intent, classification) {
+  const errors = [];
+  // Automated systems cannot access personal or family data
+  if (userId === 'system' || userId === 'automated') {
+    if (['HEALTH', 'MEMORY', 'STRATEGY'].includes(intent)) {
+      errors.push(`Automated user cannot access ${intent} intent`);
+    }
+  }
+  // Family members cannot modify constitution or routing logic
+  if (!checkPermission(userId, 'routing_logic') && ['CODE', 'AGENT'].includes(intent)) {
+    // Allow CODE/AGENT for all users — they just can't modify core routing
+  }
+  return errors;
 }
 
 async function loadConstitution(sessionId) {
@@ -237,7 +309,7 @@ async function retrieveContext({ classification, userId, message, brandContext =
 
   const sources = {};
 
-  const [philosophy, truths, activeCtx, health, business, convVec, ragDocs, perplexityData] = await Promise.all([
+  const [philosophy, truths, activeCtx, health, business, convVec, ragDocs, perplexityData, externalIntelligence] = await Promise.all([
     withTimeout(supaGet('philosophy_anchors?order=frequency_score.desc&limit=6&select=anchor_text,category'), 1000)
       .then(r => { sources.philosophy = r?.length ? 'ok' : 'empty'; return r || []; }),
 
@@ -270,7 +342,7 @@ async function retrieveContext({ classification, userId, message, brandContext =
       return res.ok ? res.json() : null;
     })(), 2000).then(r => { sources.conversation_history = r ? 'ok' : 'failed'; return r; }),
 
-    // RAG document search
+    // RAG document search (personal_intelligence)
     withTimeout((async () => {
       if (!RAG_BASE_URL) return null;
       const res = await fetch(`${RAG_BASE_URL}/query`, {
@@ -296,9 +368,22 @@ async function retrieveContext({ classification, userId, message, brandContext =
           return res.ok ? res.json() : null;
         })(), 4000).then(r => { sources.perplexity = r ? 'ok' : 'failed'; return r; })
       : Promise.resolve(null).then(r => { sources.perplexity = needsWeb ? 'no_key' : 'skipped'; return null; }),
+
+    // External intelligence — world-class marketing/industry frameworks (Section 4)
+    intent === 'STRATEGY'
+      ? withTimeout((async () => {
+          if (!RAG_BASE_URL) return null;
+          const res = await fetch(`${RAG_BASE_URL}/query`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: message, top_k: 3, collection: 'external_intelligence' }),
+          });
+          return res.ok ? res.json() : null;
+        })(), 2000).then(r => { sources.external_intelligence = r ? 'ok' : 'failed'; return r; })
+      : Promise.resolve(null).then(r => { sources.external_intelligence = 'skipped'; return null; }),
   ]);
 
-  return { philosophy, truths, activeCtx, health, business, convVec, ragDocs, perplexityData, sources };
+  return { philosophy, truths, activeCtx, health, business, convVec, ragDocs, perplexityData, externalIntelligence, sources };
 }
 
 function buildContextBlock({ philosophy, truths, activeCtx, health, business, convVec, ragDocs, profile }) {
@@ -406,8 +491,18 @@ async function callPerplexity(message, history = []) {
   return { text: d.choices?.[0]?.message?.content ?? '', model: 'perplexity/sonar-pro' };
 }
 
-async function routeSTRATEGY(message, ctx, history) {
-  const sys = `${CARLOS_PERSONA}\n\n${ctx}\n\n## Task\nStrategy question. Think through what Chris might be missing. Give a specific recommendation with clear reasoning grounded in his actual business context.`;
+async function routeSTRATEGY(message, ctx, history, externalIntelligence) {
+  // Devil's advocate: surface opposing viewpoints only if relevance >= 0.75 (Section 4)
+  let devilsAdvocateBlock = '';
+  const extResults = externalIntelligence?.results || (Array.isArray(externalIntelligence) ? externalIntelligence : []);
+  const highRelevance = extResults.filter(r => (r.score || r.similarity || 0) >= 0.75);
+  if (highRelevance.length > 0) {
+    const challenges = highRelevance.slice(0, 2).map(r => r.content || r.text || '').filter(Boolean);
+    if (challenges.length > 0) {
+      devilsAdvocateBlock = `\n\n## What World-Class Operators Have Done Differently\n${challenges.join('\n\n').slice(0, 600)}\n\nSurface maximum two challenge points alongside your recommendation. Frame as: here is what world-class operators have done differently in similar situations. Never replace the recommendation — add to it.`;
+    }
+  }
+  const sys = `${CARLOS_PERSONA}\n\n${ctx}\n\n## Task\nStrategy question. Think through what Chris might be missing. Give a specific recommendation with clear reasoning grounded in his actual business context.${devilsAdvocateBlock}`;
   try { return await callAnthropic('claude-sonnet-4-6', sys, message, history, 1024, true); }
   catch {
     try { return await callAnthropic('claude-sonnet-4-6', sys, message, history, 1024); }
@@ -633,6 +728,12 @@ async function routeMessage({ userId = 'primary', message, profile = {}, convers
   }
   const constitutionBlock = `\n\n## CARLOS CONSTITUTION v${constitution.version} — ACTIVE GOVERNANCE\n${constitution.content}\n\nEnd of constitution. All responses must comply.\n\n`;
 
+  // Permission enforcement (Section 6)
+  const permErrors = enforcePermissions(userId, 'pending', {});
+  if (permErrors.length > 0) {
+    return { reply: 'Permission denied.', intent: 'DENIED', logId: null, permissionError: permErrors[0] };
+  }
+
   // LAYER 0
   const l0 = Date.now();
   const { type: sessionType, activeSession } = await checkSessionState(userId, message);
@@ -678,7 +779,7 @@ async function routeMessage({ userId = 'primary', message, profile = {}, convers
 
   try {
     switch (intent) {
-      case 'STRATEGY':      rawResult = await routeSTRATEGY(message, ctx, conversationHistory); break;
+      case 'STRATEGY':      rawResult = await routeSTRATEGY(message, ctx, conversationHistory, retrieved.externalIntelligence); break;
       case 'ANALYSIS':      rawResult = await routeANALYSIS(message, ctx, conversationHistory); break;
       case 'CONTENT':       rawResult = await routeCONTENT(message, ctx, conversationHistory); break;
       case 'RESEARCH':      rawResult = await routeRESEARCH(message, ctx, conversationHistory, retrieved.perplexityData); break;
@@ -735,6 +836,51 @@ async function routeMessage({ userId = 'primary', message, profile = {}, convers
     source: 'carlos_chat',
   });
 
+  // Shadow mode collection (Section 3) — never shown to user
+  if (SHADOW_MODE.enabled && SHADOW_MODE.categories.includes(intent) && logId) {
+    (async () => {
+      try {
+        let cloudText = null;
+        let shadowSim = null;
+        try {
+          const shadowSys = `${CARLOS_PERSONA}\n\n${ctx}`;
+          const cloudResult = await callOpenAI(message, shadowSys, conversationHistory.slice(-4), 512);
+          cloudText = cloudResult.text;
+          // Simple similarity: word overlap
+          const wordsA = new Set(finalReply.toLowerCase().split(/\W+/).filter(Boolean));
+          const wordsB = new Set(cloudText.toLowerCase().split(/\W+/).filter(Boolean));
+          const inter = [...wordsA].filter(w => wordsB.has(w)).length;
+          shadowSim = wordsA.size + wordsB.size > 0 ? inter / (wordsA.size + wordsB.size - inter) : 0;
+        } catch {}
+
+        // Update routing log with shadow results
+        if (cloudText) {
+          await supaPatch(`carlos_routing_log?id=eq.${encodeURIComponent(logId)}`, {
+            cloud_response: cloudText.slice(0, 2000),
+            shadow_similarity_score: shadowSim,
+          });
+        }
+
+        // Store training candidate if similarity low (Section 3 pipeline)
+        if (cloudText && shadowSim !== null && shadowSim < 0.85) {
+          const promptStripped = stripPII(message);
+          const cloudStripped = stripPII(cloudText);
+          const now = new Date().toISOString();
+          await supaPost('carlos_training_data', {
+            prompt_hash: Buffer.from(message).toString('base64').slice(0, 32),
+            safe_prompt_summary: promptStripped.clean.slice(0, 500),
+            cloud_response: cloudStripped.clean.slice(0, 2000),
+            local_response: finalReply.slice(0, 2000),
+            similarity_score: shadowSim,
+            task_category: intent,
+            pii_stripped_at: now,
+            approved_for_training: false,
+          });
+        }
+      } catch {}
+    })().catch(() => {});
+  }
+
   const sentenceBreaks = finalReply.match(/[^.!?]+[.!?]+/g) || [finalReply];
   const spokenPreview = sentenceBreaks.slice(0, 2).join(' ').trim().slice(0, 200);
 
@@ -772,8 +918,13 @@ exports.handler = async function(event) {
       return { statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify({ ok }) };
     }
 
-    const { userId, threadId, message, profile, conversationHistory, brandContext } = body;
+    const { userId = 'primary', threadId, message, profile, conversationHistory, brandContext } = body;
     if (!message?.trim()) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Message required' }) };
+
+    // Block automated systems from personal/family data paths
+    if (userId === 'system' || userId === 'automated') {
+      return { statusCode: 403, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Automated users cannot access Carlos routing' }) };
+    }
 
     const result = await routeMessage({ userId, threadId, message, profile, conversationHistory, brandContext });
     return { statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(result) };

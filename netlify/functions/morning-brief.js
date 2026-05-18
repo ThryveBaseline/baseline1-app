@@ -77,6 +77,26 @@ exports.handler = async function(event) {
       ? `${clientSystem}\n\n${memBlock}`
       : clientSystem;
 
+    // Section 8: inject strict brief format rules into system prompt
+    const BRIEF_FORMAT_RULES = `
+MORNING BRIEF FORMAT — MANDATORY:
+Line 1: Zone and meaning in plain English. One sentence maximum. Never recite the number — interpret what it means today.
+Line 2: One honest sleep observation. One sentence maximum. If no data, say so plainly.
+Line 3: The Carlos line. Something that actually means something specific to this person today. Not a platitude.
+Then: 3 specific, achievable wins. Time-targeted where possible.
+Then: Done. No additional commentary.
+
+RULES:
+- Never repeat numbers already shown in the dashboard display
+- No clinical language (no "HRV variability indicates...", no "recovery metrics suggest...")
+- Total brief text must be readable in under 20 seconds
+- Carlos interprets data — he never recites it
+- Data informs tone — never appears in text unless specifically asked
+- If no Whoop data: acknowledge honestly ("Working from what I have — connect Whoop for a fuller picture")
+- Under 120 words total`;
+
+    const briefEnhancedSystem = `${enhancedSystem}\n\n${BRIEF_FORMAT_RULES}`;
+
     const res = await fetch(`${ANTHROPIC_BASE}/v1/messages`, {
       method: 'POST',
       headers: {
@@ -84,7 +104,7 @@ exports.handler = async function(event) {
         'x-api-key': ANTHROPIC_KEY,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({ model: model || 'claude-haiku-4-5-20251001', max_tokens: max_tokens || 600, system: enhancedSystem, messages }),
+      body: JSON.stringify({ model: model || 'claude-haiku-4-5-20251001', max_tokens: max_tokens || 600, system: briefEnhancedSystem, messages }),
     });
 
     const data = await res.json();
