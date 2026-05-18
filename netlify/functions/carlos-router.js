@@ -27,6 +27,11 @@ const COST_WARN_THRESHOLD = 0.50;
 const VALID_INTENTS = ['STRATEGY', 'ANALYSIS', 'CONTENT', 'RESEARCH', 'DOCUMENT', 'HEALTH', 'MEMORY', 'BUSINESS', 'CODE', 'AGENT', 'COLLABORATION'];
 const SESSION_TYPES = ['same_task', 'new_task', 'correction', 'interruption', 'clarification', 'approval', 'rejection'];
 
+// ── Constitution cache ────────────────────────────────────────────────────────
+let _constitutionCache = null;
+let _constitutionCacheTime = 0;
+const CONSTITUTION_TTL = 3_600_000; // 1 hour
+
 // ── Supabase helpers ──────────────────────────────────────────────────────────
 
 async function supaGet(path, timeout = 2000) {
@@ -72,6 +77,21 @@ async function supaPatch(path, data) {
     });
     return res.ok ? res.json() : null;
   } catch { return null; }
+}
+
+async function loadConstitution(sessionId) {
+  const now = Date.now();
+  if (_constitutionCache && now - _constitutionCacheTime < CONSTITUTION_TTL) return _constitutionCache;
+  const rows = await supaGet('carlos_constitution?is_active=eq.true&select=version,content,content_hash&limit=1', 3000);
+  const record = rows?.[0] ?? null;
+  supaPost('carlos_constitution_version', {
+    session_id: sessionId || null,
+    version: record?.version || 'unknown',
+    content_hash: record?.content_hash || null,
+    load_result: record ? 'ok' : 'missing',
+  }).catch(() => {});
+  if (record) { _constitutionCache = record; _constitutionCacheTime = now; }
+  return record;
 }
 
 // ── LAYER 0: Session state ────────────────────────────────────────────────────
@@ -604,6 +624,15 @@ async function routeMessage({ userId = 'primary', message, profile = {}, convers
   const modelsUsed = [];
   let hopCount = 0;
 
+  // Constitution enforcement — refuse to run if missing or inactive
+  const constitution = await loadConstitution(threadId);
+  if (!constitution) {
+    const err = new Error('Constitution missing or inactive');
+    err.constitutionMissing = true;
+    throw err;
+  }
+  const constitutionBlock = `\n\n## CARLOS CONSTITUTION v${constitution.version} — ACTIVE GOVERNANCE\n${constitution.content}\n\nEnd of constitution. All responses must comply.\n\n`;
+
   // LAYER 0
   const l0 = Date.now();
   const { type: sessionType, activeSession } = await checkSessionState(userId, message);
@@ -640,7 +669,7 @@ async function routeMessage({ userId = 'primary', message, profile = {}, convers
   const l2 = Date.now();
   const retrieved = await retrieveContext({ classification, userId, message, brandContext });
   layerTimes.l2 = Date.now() - l2;
-  const ctx = buildContextBlock({ ...retrieved, profile });
+  const ctx = constitutionBlock + buildContextBlock({ ...retrieved, profile });
 
   // LAYER 3
   const l3 = Date.now();
@@ -749,6 +778,10 @@ exports.handler = async function(event) {
     const result = await routeMessage({ userId, threadId, message, profile, conversationHistory, brandContext });
     return { statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(result) };
   } catch (err) {
+    if (err.constitutionMissing) {
+      console.error('carlos-router: constitution integrity check failed — refusing to start');
+      return { statusCode: 503, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Carlos is offline — constitution integrity check failed. System administrator action required.' }) };
+    }
     console.error('carlos-router error:', err);
     return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: err.message || 'Internal error' }) };
   }
