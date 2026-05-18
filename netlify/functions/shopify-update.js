@@ -22,6 +22,7 @@ exports.handler = async function(event) {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
   if (!SHOPIFY_TOKEN) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'SHOPIFY_THRYVE_ADMIN_ACCESS_TOKEN not configured' }) };
+  if (SHOPIFY_TOKEN.startsWith('shpss_')) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'Token is a Storefront API token (shpss_) — Admin API requires a shpat_ Custom App token. Generate one at Shopify admin → Settings → Apps → Develop apps.' }) };
 
   try {
     const { productId, body } = JSON.parse(event.body || '{}');
@@ -34,6 +35,7 @@ exports.handler = async function(event) {
     });
 
     const data = await res.json();
+    if (res.status === 401) return { statusCode: 401, headers: CORS, body: JSON.stringify({ error: 'Shopify 401 — token rejected. Ensure SHOPIFY_THRYVE_ADMIN_ACCESS_TOKEN is a shpat_ Admin API token with write_products scope.' }) };
     if (!res.ok) return { statusCode: res.status, headers: CORS, body: JSON.stringify({ error: `Shopify API error ${res.status}` }) };
 
     const errors = data.data?.productUpdate?.userErrors;
