@@ -3506,6 +3506,13 @@ function unlockAudio() { try { getAudioCtx(); } catch {} }
 const CARLOS = {
   thread: [],           // {role, content, actions, intent}
   threadId: null,
+  // ElevenAgent WebSocket state
+  elevenWs: null,
+  elevenMicStream: null,
+  elevenMicCtx: null,
+  elevenMicProcessor: null,
+  elevenPlayNext: 0,
+  elevenConvId: null,
   isFirstMessage: true,
   isBusy: false,
   recognition: null,
@@ -3763,30 +3770,212 @@ function carlosSingleShotMic() {
   carlosStartMic();
 }
 
-// Conversation: continuous loop until toggled off
+// ── ElevenAgent conversation mode ─────────────────────────────────────────────
+
 function carlosToggleConversation() {
-  if (!CARLOS.speechSupported) { toast('Voice input not supported in this browser', 'warn'); return; }
   if (CARLOS.voiceMode === 'conversation') {
     carlosExitConversation();
   } else {
     unlockAudio();
-    CARLOS.voiceMode = 'conversation';
-    document.getElementById('carlosConvBtn').classList.add('active');
-    toast('Conversation mode — speak anytime. Tap again to end.', 'info');
-    carlosStartMic();
+    carlosElevenConnect();
   }
 }
 
 function carlosExitConversation() {
+  carlosElevenDisconnect();
+}
+
+async function carlosElevenConnect() {
+  if (CARLOS.elevenWs) return; // already connected
+  const convBtn = document.getElementById('carlosConvBtn');
+  convBtn.classList.add('active');
+  carlosSetStatus('Connecting…');
+  carlosShowChip('Connecting', 'thinking');
+
+  try {
+    // Get signed URL + dynamic variables from our server
+    const res = await fetch('/api/carlos-session-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: 'primary' }),
+    });
+    if (!res.ok) throw new Error(`Session token failed: ${res.status}`);
+    const { signed_url, initiation_payload } = await res.json();
+
+    // Request microphone before opening WS
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    CARLOS.elevenMicStream = stream;
+
+    // Open WebSocket
+    const ws = new WebSocket(signed_url);
+    CARLOS.elevenWs = ws;
+    CARLOS.elevenPlayNext = 0;
+    CARLOS.voiceMode = 'conversation';
+
+    ws.onopen = () => {
+      // Send initiation payload with dynamic variables immediately
+      ws.send(JSON.stringify(initiation_payload));
+
+      // Start streaming mic audio
+      const micCtx = new AudioContext({ sampleRate: 16000 });
+      const source = micCtx.createMediaStreamSource(stream);
+      const processor = micCtx.createScriptProcessor(4096, 1, 1);
+      processor.onaudioprocess = (e) => {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        const float32 = e.inputBuffer.getChannelData(0);
+        const pcm16 = new Int16Array(float32.length);
+        for (let i = 0; i < float32.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32[i]));
+          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        const b64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
+        ws.send(JSON.stringify({ user_audio_chunk: b64 }));
+      };
+      source.connect(processor);
+      processor.connect(micCtx.destination);
+      CARLOS.elevenMicCtx = micCtx;
+      CARLOS.elevenMicProcessor = processor;
+
+      carlosClearChip();
+      carlosSetStatus('Listening…');
+      convBtn.classList.add('listening');
+      toast('Carlos is listening — speak now. Tap again to end.', 'info');
+    };
+
+    ws.onmessage = (event) => {
+      try { carlosElevenHandleMessage(JSON.parse(event.data)); } catch {}
+    };
+
+    ws.onerror = (err) => {
+      console.error('ElevenAgent WS error:', err);
+      carlosElevenDisconnect();
+      toast('Voice connection error — try again', 'warn');
+    };
+
+    ws.onclose = (e) => {
+      if (CARLOS.voiceMode === 'conversation') {
+        carlosElevenDisconnect();
+        if (e.code !== 1000) toast('Voice session ended', 'info');
+      }
+    };
+  } catch (err) {
+    console.error('carlosElevenConnect error:', err);
+    carlosClearChip();
+    carlosSetStatus('Ready');
+    document.getElementById('carlosConvBtn').classList.remove('active', 'listening');
+    CARLOS.voiceMode = null;
+    CARLOS.elevenWs = null;
+    const msg = err.message?.includes('Permission') || err.message?.includes('getUserMedia')
+      ? 'Microphone access denied — enable it in browser settings'
+      : 'Could not start voice session — ' + err.message;
+    toast(msg, 'warn');
+  }
+}
+
+function carlosElevenDisconnect() {
   CARLOS.voiceMode = null;
-  document.getElementById('carlosConvBtn').classList.remove('active');
+
+  if (CARLOS.elevenMicProcessor) {
+    try { CARLOS.elevenMicProcessor.disconnect(); } catch {}
+    CARLOS.elevenMicProcessor = null;
+  }
+  if (CARLOS.elevenMicCtx) {
+    try { CARLOS.elevenMicCtx.close(); } catch {}
+    CARLOS.elevenMicCtx = null;
+  }
+  if (CARLOS.elevenMicStream) {
+    CARLOS.elevenMicStream.getTracks().forEach(t => t.stop());
+    CARLOS.elevenMicStream = null;
+  }
+  if (CARLOS.elevenWs) {
+    try { CARLOS.elevenWs.close(1000, 'user ended session'); } catch {}
+    CARLOS.elevenWs = null;
+  }
+
+  document.getElementById('carlosConvBtn').classList.remove('active', 'listening');
   document.getElementById('carlosMic').classList.remove('listening');
-  CARLOS.recognition?.stop();
   CARLOS.isListening = false;
   carlosStopAudio();
   carlosClearChip();
   carlosSetStatus('Ready');
-  toast('Conversation ended', 'info');
+}
+
+function carlosElevenHandleMessage(msg) {
+  switch (msg.type) {
+    case 'conversation_initiation_metadata':
+      CARLOS.elevenConvId = msg.conversation_initiation_metadata_event?.conversation_id;
+      break;
+
+    case 'audio':
+      if (msg.audio_event?.audio_base_64) carlosElevenPlayPcm(msg.audio_event.audio_base_64);
+      break;
+
+    case 'agent_response':
+      const agentText = msg.agent_response_event?.agent_response;
+      if (agentText) {
+        carlosRenderCarlos(agentText, [], 'general_chat');
+        CARLOS.thread.push({ role: 'assistant', content: agentText });
+        carlosSetStatus('Listening…');
+      }
+      break;
+
+    case 'user_transcript':
+      const userText = msg.user_transcription_event?.user_transcript;
+      if (userText) {
+        carlosRenderUser(userText);
+        CARLOS.thread.push({ role: 'user', content: userText });
+        carlosSetStatus('Thinking…');
+        carlosShowChip('Thinking', 'thinking');
+      }
+      break;
+
+    case 'internal_tentative_agent_response':
+      carlosShowChip('Speaking', 'thinking');
+      carlosSetStatus('Speaking…');
+      break;
+
+    case 'interruption':
+      carlosStopAudio();
+      CARLOS.elevenPlayNext = 0;
+      break;
+
+    case 'ping':
+      if (CARLOS.elevenWs?.readyState === WebSocket.OPEN) {
+        CARLOS.elevenWs.send(JSON.stringify({ type: 'pong', event_id: msg.ping_event?.event_id }));
+      }
+      break;
+
+    case 'agent_response_correction':
+    case 'client_tool_call':
+      break;
+  }
+}
+
+function carlosElevenPlayPcm(base64) {
+  // PCM 16-bit LE, 16kHz mono from ElevenLabs → schedule with Web Audio
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const pcm16 = new Int16Array(bytes.buffer);
+  const float32 = new Float32Array(pcm16.length);
+  for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768;
+
+  const ctx = getAudioCtx();
+  const buf = ctx.createBuffer(1, float32.length, 16000);
+  buf.copyToChannel(float32, 0);
+  const source = ctx.createBufferSource();
+  source.buffer = buf;
+  source.connect(ctx.destination);
+
+  const now = ctx.currentTime;
+  const playAt = Math.max(now + 0.05, CARLOS.elevenPlayNext || now + 0.05);
+  source.start(playAt);
+  CARLOS.elevenPlayNext = playAt + buf.duration;
+  CARLOS.currentSource = source;
+  CARLOS.isPlaying = true;
+  source.onended = () => {
+    if (CARLOS.currentSource === source) { CARLOS.isPlaying = false; CARLOS.currentSource = null; }
+  };
 }
 
 // ── Brief read aloud ──────────────────────────────────────────────────────────

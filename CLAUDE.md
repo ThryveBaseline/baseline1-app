@@ -14,7 +14,7 @@ Personal health + wellness PWA (Progressive Web App) deployed on Netlify.
 | Deployment | Netlify — auto-deploy from `main` branch |
 | Serverless Functions | Netlify Functions (Node.js) in `netlify/functions/` |
 | AI | Anthropic Claude (claude-sonnet-4-6 for chat, claude-haiku-4-5 for quick calls) |
-| Voice | ElevenLabs TTS via `netlify/functions/elevenlabs-tts.js` |
+| Voice | ElevenLabs ConvAI Agent (ElevenAgent) via WebSocket |
 | Database | Supabase (PostgreSQL + pgvector) |
 | Health Data | Whoop OAuth → Windmill nightly sync → Supabase |
 | RAG | rag-command-center at https://rag-command-center.onrender.com |
@@ -23,8 +23,15 @@ Personal health + wellness PWA (Progressive Web App) deployed on Netlify.
 ## Key Files
 - `index.html` — entire frontend: Carlos chat, morning brief, supplement tracker, profile
 - `netlify/functions/claude.js` — passthrough proxy for Claude API (raw body forward)
-- `netlify/functions/carlos-chat.js` — orchestration: intent classification → context → Claude
-- `netlify/functions/elevenlabs-tts.js` — text-to-speech via ElevenLabs API
+- `netlify/functions/carlos-chat.js` — text mode: intent classification → context → Claude
+- `netlify/functions/elevenlabs-tts.js` — TTS for brief read-aloud (not for Carlos voice mode)
+- `netlify/functions/carlos-session-token.js` — ElevenAgent: signed URL + dynamic variables
+- `netlify/functions/carlos-post-call.js` — ElevenAgent: post-call webhook → Supabase + distillation
+- `netlify/functions/carlos-tools.js` — ElevenAgent tool webhook (health data, food log, business data)
+- `setup/create-carlos-agent.js` — one-shot: create ElevenAgent with system prompt + tools
+- `setup/upload-knowledge-base.js` — one-shot: upload carlos-foundation-v1.md to ElevenLabs KB
+- `supabase/migrations/20260517_conversation_history.sql` — conversation_history table DDL
+- `supabase/functions/carlos-get-summary/` — Supabase Edge Function for multi-table queries
 - `netlify/functions/whoop-auth.js` — Whoop OAuth initiation
 - `netlify/functions/whoop-callback.js` — Whoop OAuth token exchange → Supabase
 - `netlify/functions/whoop-data.js` — health context for morning brief
@@ -33,12 +40,13 @@ Personal health + wellness PWA (Progressive Web App) deployed on Netlify.
 ## Architecture Decisions
 - **Single-file frontend** — all app logic in `index.html`. No build step, no bundler. Ships directly.
 - **Voice behavior rule** — input method determines response method. Type → text back. Tap mic → audio back. Conversation button → continuous loop.
-- **Voice state machine** — `CARLOS.voiceMode: null | 'single' | 'conversation'`. Single-shot terminates in `carlosSendRaw` finally block. Conversation loops from finally.
-- **`fromVoice` parameter pattern** — passed through `carlosSend(fromVoice)` → `carlosSendRaw(text, fromVoice)`. Avoids shared mutable state race conditions.
-- **`capturedVoiceMode`** — captured at top of `carlosSendRaw` before any awaits. Prevents race conditions when mode changes during async API call.
-- **Carlos intent classification** — deterministic keyword routing in `classifyIntent()`. No ML. Intents: food_log, agent_feedback, health_query, business_query, label_check, reddit_draft, general_chat.
+- **Voice modes** — text input and single-shot mic use `carlos-chat.js` (Claude API). Conversation mode (green button) uses ElevenAgent WebSocket — full STT+LLM+TTS handled by ElevenLabs.
+- **ElevenAgent flow** — tap conversation btn → `carlosElevenConnect()` → `carlos-session-token.js` → signed URL → WebSocket → stream PCM mic audio → receive PCM audio chunks → play via Web Audio.
+- **`fromVoice` parameter pattern** — passed through `carlosSend(fromVoice)` → `carlosSendRaw(text, fromVoice)`. Avoids shared mutable state race conditions. Still used for single-shot mic.
+- **Carlos intent classification** — deterministic keyword routing in `classifyIntent()`. No ML. Used for text mode only. ElevenAgent tools handle voice intents server-side.
 - **AudioContext unlock** — `unlockAudio()` must be called synchronously in button-click handlers before any async work. Stays unlocked for the session.
-- **prompt caching** — Carlos system prompt sent as block array with `cache_control: {type: "ephemeral"}` + `anthropic-beta: prompt-caching-2024-07-31`. See `callClaude()` in carlos-chat.js.
+- **ElevenAgent dynamic variables** — injected at session start via `conversation_initiation_client_data`. Context: health summary, stable truths, philosophy anchors, last 3 conversation summaries.
+- **Setup order** — 1) run `create-carlos-agent.js` to get CARLOS_AGENT_ID, 2) add to Netlify env, 3) run `upload-knowledge-base.js`, 4) apply conversation_history migration.
 
 ## Naming Conventions
 - Functions: camelCase (`carlosSendRaw`, `generateBrief`, `buildSystemPrompt`)
@@ -73,10 +81,12 @@ Set in Netlify dashboard → Site → Environment Variables.
 
 | Variable | Required | Used By | Description |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | ✅ | claude.js, carlos-chat.js | Anthropic API key |
-| `ELEVENLABS_API_KEY` | ✅ | elevenlabs-tts.js | ElevenLabs TTS key |
-| `SUPABASE_URL` | ✅ | carlos-chat.js, whoop-callback.js | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | carlos-chat.js | Server-only — never expose to frontend |
+| `ANTHROPIC_API_KEY` | ✅ | claude.js, carlos-chat.js, carlos-tools.js | Anthropic API key |
+| `ELEVENLABS_API_KEY` | ✅ | elevenlabs-tts.js, carlos-session-token.js | ElevenLabs key |
+| `CARLOS_AGENT_ID` | ✅ | carlos-session-token.js | ElevenAgent ID — run create-carlos-agent.js |
+| `ELEVENLABS_WEBHOOK_SECRET` | optional | carlos-post-call.js | HMAC secret for post-call webhook |
+| `SUPABASE_URL` | ✅ | carlos-chat.js, carlos-tools.js, whoop-callback.js | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | carlos-chat.js, carlos-tools.js | Server-only — never expose to frontend |
 | `WHOOP_CLIENT_ID` | ⚠️ pending | whoop-auth.js | Whoop OAuth app ID |
 | `WHOOP_CLIENT_SECRET` | ⚠️ pending | whoop-callback.js | Whoop OAuth app secret |
 | `WHOOP_REDIRECT_URI` | ⚠️ pending | whoop-auth.js | e.g. `https://baseline.netlify.app/.netlify/functions/whoop-callback` |
